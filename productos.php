@@ -21,8 +21,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
    if (!$codigo || !$nombre) {
         $error = "Código y nombre son obligatorios.";
-    } elseif ($precio_venta < $precio_compra) {
+  } elseif ($precio_venta < $precio_compra) {
         $error = "El precio de venta no puede ser menor al precio de compra.";
+    } elseif ($stock_min > $stock) {
+        $error = "El stock mínimo no puede ser mayor al stock actual.";
     } else {
         if ($id) {
             $stmt = $conexion->prepare("UPDATE productos SET codigo=?, nombre=?, categoria=?, proveedor=?, precio_compra=?, precio_venta=?, stock=?, stock_min=?, estado=? WHERE id=?");
