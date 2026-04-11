@@ -12,6 +12,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $codigo = trim($_POST['codigo']);
     $nombre = trim($_POST['nombre']);
     $categoria = trim($_POST['categoria']);
+    if ($categoria === '__nueva__') {
+        $categoria = trim($_POST['categoria_nueva'] ?? '');
+    }
+    
     $proveedor = trim($_POST['proveedor']);
     $precio_compra = floatval($_POST['precio_compra'] ?? 0);
     $precio_venta = floatval($_POST['precio_venta'] ?? 0);
@@ -321,17 +325,21 @@ $result = $conexion->query("SELECT * FROM productos ORDER BY id DESC");
                  placeholder="Nombre del producto" required>
         </div>
 
-        <div class="form-group">
+       <div class="form-group">
           <label for="prodCategory">Categoría</label>
-          <select id="prodCategory" name="categoria" class="form-control" required>
+          <select id="catSelect" name="categoria" class="form-control" required>
             <option value="">Seleccione...</option>
             <?php foreach($categorias_array as $categoria): ?>
-              <option value="<?= htmlspecialchars($categoria) ?>" 
+              <option value="<?= htmlspecialchars($categoria) ?>"
                       <?= ( ($editProduct['categoria'] ?? '') === $categoria) ? 'selected' : '' ?>>
                 <?= htmlspecialchars($categoria) ?>
               </option>
             <?php endforeach; ?>
+            <option value="__nueva__">+ Nueva categoría...</option>
           </select>
+          <input type="text" id="catNueva" name="categoria_nueva" class="form-control"
+                 placeholder="Escribe la nueva categoría"
+                 style="margin-top:8px; display:none;">
         </div>
 
         <div class="form-group">
@@ -466,6 +474,16 @@ $result = $conexion->query("SELECT * FROM productos ORDER BY id DESC");
 </div>
 
 <script>
+  // Categoría nueva
+const catSelect = document.getElementById('catSelect');
+const catNueva  = document.getElementById('catNueva');
+
+catSelect.addEventListener('change', function () {
+  catNueva.style.display = this.value === '__nueva__' ? 'block' : 'none';
+  catNueva.required = this.value === '__nueva__';
+});
+
+
 document.getElementById('prodSearchBtn').addEventListener('click', function() {
   const searchText = document.getElementById('prodSearchText').value.toLowerCase();
   const category = document.getElementById('prodSearchCategory').value;
