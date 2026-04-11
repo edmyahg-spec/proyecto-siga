@@ -48,8 +48,9 @@ if ($action === 'delete' && isset($_GET['id']) && $_SESSION['rol'] === 'admin') 
 // editar carga
 $editProduct = null;
 if ($action === 'edit' && isset($_GET['id'])) {
+    $id = intval($_GET['id']);
     $stmt = $conexion->prepare("SELECT * FROM productos WHERE id=?");
-    $stmt->bind_param("i", $_GET['id']);
+    $stmt->bind_param("i", $id);
     $stmt->execute();
     $editProduct = $stmt->get_result()->fetch_assoc();
 }
