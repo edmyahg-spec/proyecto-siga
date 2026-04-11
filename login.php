@@ -158,12 +158,18 @@ if (isset($_SESSION['usuario'])) {
       font-weight: 600;
       font-size: 14px;
       border: 2px solid #d04c52;
+    }
 
-      .alert-bloqueado {
-        background: #7b1c1c;
-        border-color: #5a1010;
-        animation: none;
-      }
+    .toggle-password {
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      color: #5a4433;
     }
   </style>
 </head>
@@ -176,26 +182,19 @@ if (isset($_SESSION['usuario'])) {
     <h1>Vidrios y Aluminios<br>Grupo Águila</h1>
 
     <?php
-    $errorMsg = '';
     $errorTipo = $_GET['error'] ?? '';
-    $restantes = intval($_GET['restantes'] ?? 0);
-    $tiempo = intval($_GET['tiempo'] ?? 0);
 
-    if ($errorTipo === 'credenciales') {
-      $errorMsg = $restantes > 0
-        ? "Usuario o contraseña incorrectos. Te quedan $restantes intento(s)."
-        : "Usuario o contraseña incorrectos.";
-    } elseif ($errorTipo === 'inactivo') {
-      $errorMsg = "Tu cuenta está desactivada. Contacta al administrador.";
-    } elseif ($errorTipo === 'vacio') {
-      $errorMsg = "Debes ingresar usuario y contraseña.";
-    } elseif ($errorTipo === 'bloqueado') {
-      $errorMsg = "Demasiados intentos fallidos. Espera $tiempo minuto(s) e intenta de nuevo.";
-    }
+    $mensajes = [
+      'credenciales' => 'Usuario o contraseña incorrectos.',
+      'inactivo'     => 'Tu cuenta está desactivada. Contacta al administrador.',
+      'vacio'        => 'Debes ingresar usuario y contraseña.',
+    ];
+
+    $errorMsg = $mensajes[$errorTipo] ?? '';
     ?>
 
     <?php if ($errorMsg): ?>
-      <div class="alert <?= $errorTipo === 'bloqueado' ? 'alert-bloqueado' : '' ?>">
+      <div class="alert">
         <?= htmlspecialchars($errorMsg) ?>
       </div>
     <?php endif; ?>
@@ -208,7 +207,15 @@ if (isset($_SESSION['usuario'])) {
 
       <div class="input-group">
         <label class="input-label">Contraseña</label>
-        <input type="password" name="password" class="input-field" required placeholder="Ingrese su contraseña">
+        <div style="position: relative;">
+          <input type="password" name="password" id="password" class="input-field" required placeholder="Ingrese su contraseña" style="padding-right: 48px;">
+          <button type="button" class="toggle-password" onclick="togglePass()">
+            <svg id="eyeIcon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
       </div>
 
       <button class="btn-login" type="submit">Iniciar sesión</button>
@@ -219,6 +226,18 @@ if (isset($_SESSION['usuario'])) {
       <p>Usuario: <strong>admin</strong> - Contraseña: <strong>Admin123!</strong></p>
     </div>
   </div>
+
+  <script>
+    function togglePass() {
+      const input = document.getElementById('password');
+      const icon = document.getElementById('eyeIcon');
+      const visible = input.type === 'text';
+      input.type = visible ? 'password' : 'text';
+      icon.innerHTML = visible
+        ? '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>'
+        : '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>';
+    }
+  </script>
 
 </body>
 
