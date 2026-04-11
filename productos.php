@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->bind_param("ssssddiis", $codigo, $nombre, $categoria, $proveedor, $precio_compra, $precio_venta, $stock, $stock_min, $estado);
             $stmt->execute();
         }
-        header("Location: productos.php");
+        header("Location: productos.php?success=1");
         exit;
     }
 }
@@ -45,7 +45,7 @@ if ($action === 'delete' && isset($_GET['id']) && $_SESSION['rol'] === 'admin') 
     $stmt = $conexion->prepare("DELETE FROM productos WHERE id=?");
     $stmt->bind_param("i", $id);
     $stmt->execute();
-    header("Location: productos.php");
+   header("Location: productos.php?success=2");
     exit;
 }
 
@@ -67,6 +67,15 @@ while($cat = $categorias_db->fetch_assoc()) {
 }
 
 // listar
+// Mensaje de éxito
+$successMsg = '';
+$successCode = intval($_GET['success'] ?? 0);
+if ($successCode === 1) $successMsg = "Producto guardado correctamente.";
+if ($successCode === 2) $successMsg = "Producto eliminado correctamente.";
+
+// listar
+//$result = $conexion->query("SELECT * FROM productos ORDER BY id DESC");
+
 $result = $conexion->query("SELECT * FROM productos ORDER BY id DESC");
 ?>
 <!doctype html>
@@ -273,9 +282,21 @@ $result = $conexion->query("SELECT * FROM productos ORDER BY id DESC");
     <p class="page-subtitle">Sistema de Gestión Comercial</p>
   </div>
 
-  <?php if(!empty($error)): ?>
-    <div class="alert error" style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 6px; margin-bottom: 20px;">
-      <?=htmlspecialchars($error)?>
+  <?php if (!empty($error)): ?>
+    <div style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 6px; margin-bottom: 20px; font-weight: 500;">
+      <?= htmlspecialchars($error) ?>
+    </div>
+  <?php endif; ?>
+
+ <?php if (!empty($error)): ?>
+    <div style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 6px; margin-bottom: 20px; font-weight: 500;">
+      <?= htmlspecialchars($error) ?>
+    </div>
+  <?php endif; ?>
+
+  <?php if ($successMsg): ?>
+    <div style="background: #d4edda; color: #155724; padding: 12px; border-radius: 6px; margin-bottom: 20px; font-weight: 500;">
+      <?= htmlspecialchars($successMsg) ?>
     </div>
   <?php endif; ?>
 
