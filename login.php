@@ -1,8 +1,8 @@
 <?php
 session_start();
 if (isset($_SESSION['usuario'])) {
-    header("Location: dashboard.php");
-    exit;
+  header("Location: dashboard.php");
+  exit;
 }
 ?>
 <!doctype html>
@@ -41,7 +41,7 @@ if (isset($_SESSION['usuario'])) {
       border-radius: 50%;
       margin-bottom: 20px;
       border: 4px solid #3b2b1f;
-      box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
     }
 
     h1 {
@@ -158,6 +158,12 @@ if (isset($_SESSION['usuario'])) {
       font-weight: 600;
       font-size: 14px;
       border: 2px solid #d04c52;
+
+      .alert-bloqueado {
+        background: #7b1c1c;
+        border-color: #5a1010;
+        animation: none;
+      }
     }
   </style>
 </head>
@@ -169,8 +175,29 @@ if (isset($_SESSION['usuario'])) {
 
     <h1>Vidrios y Aluminios<br>Grupo Águila</h1>
 
-    <?php if (isset($_GET['error'])): ?>
-      <div class="alert">Usuario o contraseña incorrectos</div>
+    <?php
+    $errorMsg = '';
+    $errorTipo = $_GET['error'] ?? '';
+    $restantes = intval($_GET['restantes'] ?? 0);
+    $tiempo = intval($_GET['tiempo'] ?? 0);
+
+    if ($errorTipo === 'credenciales') {
+      $errorMsg = $restantes > 0
+        ? "Usuario o contraseña incorrectos. Te quedan $restantes intento(s)."
+        : "Usuario o contraseña incorrectos.";
+    } elseif ($errorTipo === 'inactivo') {
+      $errorMsg = "Tu cuenta está desactivada. Contacta al administrador.";
+    } elseif ($errorTipo === 'vacio') {
+      $errorMsg = "Debes ingresar usuario y contraseña.";
+    } elseif ($errorTipo === 'bloqueado') {
+      $errorMsg = "Demasiados intentos fallidos. Espera $tiempo minuto(s) e intenta de nuevo.";
+    }
+    ?>
+
+    <?php if ($errorMsg): ?>
+      <div class="alert <?= $errorTipo === 'bloqueado' ? 'alert-bloqueado' : '' ?>">
+        <?= htmlspecialchars($errorMsg) ?>
+      </div>
     <?php endif; ?>
 
     <form action="api/login_check.php" method="post">
@@ -194,4 +221,5 @@ if (isset($_SESSION['usuario'])) {
   </div>
 
 </body>
+
 </html>
