@@ -23,24 +23,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stock_min = intval($_POST['stock_min'] ?? 0);
     $estado = $_POST['estado'] ?? 'activo';
 
-   if (!$codigo || !$nombre) {
+  if (!$codigo || !$nombre) {
         $error = "Código y nombre son obligatorios.";
-  } elseif ($precio_venta < $precio_compra) {
+    } elseif (!$categoria) {
+        $error = "La categoría es obligatoria.";
+    } elseif ($precio_venta < $precio_compra) {
         $error = "El precio de venta no puede ser menor al precio de compra.";
     } elseif ($stock_min > $stock) {
         $error = "El stock mínimo no puede ser mayor al stock actual.";
     } else {
-        if ($id) {
-            $stmt = $conexion->prepare("UPDATE productos SET codigo=?, nombre=?, categoria=?, proveedor=?, precio_compra=?, precio_venta=?, stock=?, stock_min=?, estado=? WHERE id=?");
-            $stmt->bind_param("ssssddiisi", $codigo, $nombre, $categoria, $proveedor, $precio_compra, $precio_venta, $stock, $stock_min, $estado, $id);
-            $stmt->execute();
+        // Verificar código duplicado
+        $checkId = $id ?? 0;
+        $check = $conexion->prepare("SELECT id FROM productos WHERE codigo = ? AND id != ?");
+        $check->bind_param("si", $codigo, $checkId);
+        $check->execute();
+        $check->store_result();
+
+        if ($check->num_rows > 0) {
+            $error = "El código '$codigo' ya está registrado en otro producto.";
         } else {
-            $stmt = $conexion->prepare("INSERT INTO productos (codigo,nombre,categoria,proveedor,precio_compra,precio_venta,stock,stock_min,estado) VALUES (?,?,?,?,?,?,?,?,?)");
-            $stmt->bind_param("ssssddiis", $codigo, $nombre, $categoria, $proveedor, $precio_compra, $precio_venta, $stock, $stock_min, $estado);
-            $stmt->execute();
+            if ($id) {
+                $stmt = $conexion->prepare("UPDATE productos SET codigo=?, nombre=?, categoria=?, proveedor=?, precio_compra=?, precio_venta=?, stock=?, stock_min=?, estado=? WHERE id=?");
+                $stmt->bind_param("ssssddiisi", $codigo, $nombre, $categoria, $proveedor, $precio_compra, $precio_venta, $stock, $stock_min, $estado, $id);
+                $stmt->execute();
+            } else {
+                $stmt = $conexion->prepare("INSERT INTO productos (codigo,nombre,categoria,proveedor,precio_compra,precio_venta,stock,stock_min,estado) VALUES (?,?,?,?,?,?,?,?,?)");
+                $stmt->bind_param("ssssddiis", $codigo, $nombre, $categoria, $proveedor, $precio_compra, $precio_venta, $stock, $stock_min, $estado);
+                $stmt->execute();
+            }
+            header("Location: productos.php?success=1");
+            exit;
         }
-        header("Location: productos.php?success=1");
-        exit;
     }
 }
 
