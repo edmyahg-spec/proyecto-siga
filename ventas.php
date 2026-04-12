@@ -124,12 +124,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_sale'])) {
 $prods = $conexion->query("SELECT id, codigo, nombre, stock, precio_venta FROM productos WHERE estado='activo' ORDER BY nombre");
 
 // CORRECCIÓN: Ventas recientes - Sumar las cantidades en lugar de contar líneas
-$ventas_recientes = $conexion->query("SELECT v.*, SUM(vd.cantidad) as total_unidades 
-                                     FROM ventas v 
-                                     LEFT JOIN ventas_detalle vd ON v.id = vd.venta_id 
-                                     GROUP BY v.id 
-                                     ORDER BY v.fecha DESC 
-                                     LIMIT 10");
+$ventas_recientes = $conexion->query("
+    SELECT v.*, 
+           SUM(vd.cantidad) as total_unidades,
+           GROUP_CONCAT(CONCAT(p.codigo, ' x', vd.cantidad) ORDER BY p.codigo SEPARATOR ', ') as productos_detalle
+    FROM ventas v 
+    LEFT JOIN ventas_detalle vd ON v.id = vd.venta_id
+    LEFT JOIN productos p ON vd.producto_id = p.id
+    GROUP BY v.id 
+    ORDER BY v.fecha DESC 
+    LIMIT 10");
 ?>
 <!doctype html>
 <html lang="es">
