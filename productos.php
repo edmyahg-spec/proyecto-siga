@@ -324,11 +324,13 @@ $result = $conexion->query("SELECT * FROM productos ORDER BY id DESC");
       <form method="post">
         <input type="hidden" name="id" value="<?= htmlspecialchars($editProduct['id'] ?? '') ?>">
         
-        <div class="form-group">
+      <div class="form-group">
           <label for="prodCode">Código</label>
           <input type="text" id="prodCode" name="codigo" class="form-control" 
                  value="<?= htmlspecialchars($editProduct['codigo'] ?? '') ?>" 
-                 placeholder="Ej. VID-001" required>
+                 placeholder="Ej. VID-001"
+                 <?= $editProduct ? 'readonly style="background:#f0f0f0; cursor:not-allowed;"' : '' ?>
+                 required>
         </div>
 
         <div class="form-group">
