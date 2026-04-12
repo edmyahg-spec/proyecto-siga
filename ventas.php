@@ -113,6 +113,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_sale'])) {
             exit;
         }
 
+        // Armar lista de productos para alerta
+        $codigos = array_map(fn($it) => $it['codigo'], $_SESSION['carrito']);
+        $_SESSION['venta_alerta'] = "Venta registrada: " . implode(', ', $codigos);
         $_SESSION['carrito'] = [];
         header("Location: ticket.php?id=$venta_id");
         exit;
@@ -312,11 +315,19 @@ $ventas_recientes = $conexion->query("
     <p class="page-subtitle">Sistema de Gestión Comercial</p>
   </div>
 
-  <?php if(!empty($error)): ?>
-    <div class="alert error" style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 6px; margin-bottom: 20px;">
-      <?=htmlspecialchars($error)?>
+<?php if(!empty($error)): ?>
+    <div style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 6px; margin-bottom: 20px; font-weight:500;">
+      <?= htmlspecialchars($error) ?>
     </div>
   <?php endif; ?>
+
+  <?php if(!empty($_SESSION['venta_alerta'])): ?>
+    <div id="ventaAlerta" style="background: #d4edda; color: #155724; padding: 12px 16px; border-radius: 6px; margin-bottom: 20px; font-weight:500; display:flex; justify-content:space-between; align-items:center;">
+      <span>✔ <?= htmlspecialchars($_SESSION['venta_alerta']) ?></span>
+      <button onclick="document.getElementById('ventaAlerta').style.display='none'" style="background:none; border:none; cursor:pointer; font-size:16px; color:#155724;">✕</button>
+    </div>
+  <?php unset($_SESSION['venta_alerta']); endif; ?>
+  
 
   <div class="ventas-grid">
     <!-- Formulario Agregar Producto -->
@@ -433,17 +444,42 @@ $ventas_recientes = $conexion->query("
   <div class="form-section">
     <h3 class="section-title">Ventas recientes</h3>
     <table class="ventas-table">
-      <thead>
+     <thead>
         <tr>
           <th>Fecha</th>
           <th>Folio</th>
-          <th>Productos</th>
-          <th>Unidades</th>
+          <th>Productos vendidos</th>
           <th>Total</th>
           <th>Usuario</th>
         </tr>
       </thead>
       <tbody>
+        <?php 
+        $ventas_array = [];
+        while($venta = $ventas_recientes->fetch_assoc()):
+            $ventas_array[] = $venta;
+        endwhile;
+
+        if (empty($ventas_array)): ?>
+          <tr><td colspan="5" style="text-align:center; color:#6c757d;">No hay ventas recientes</td></tr>
+        <?php else: ?>
+          <?php foreach($ventas_array as $venta): ?>
+          <tr>
+            <td><?= date('d/m/Y H:i', strtotime($venta['fecha'])) ?></td>
+            <td><strong><?= htmlspecialchars($venta['folio']) ?></strong></td>
+            <td>
+              <span style="font-size:13px; color:#3b2b1f;">
+                <?= htmlspecialchars($venta['productos_detalle'] ?? 'Sin detalle') ?>
+              </span>
+            </td>
+            <td class="text-right">$<?= number_format($venta['total'], 2) ?></td>
+            <td><?= htmlspecialchars($venta['usuario']) ?></td>
+          </tr>
+          <?php endforeach; ?>
+        <?php endif; ?>
+      </tbody>
+
+
         <?php while($venta = $ventas_recientes->fetch_assoc()): ?>
           <tr>
             <td><?= date('d/m/Y H:i', strtotime($venta['fecha'])) ?></td>
