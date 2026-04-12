@@ -212,9 +212,10 @@ $current_page = basename($_SERVER['PHP_SELF']);
   <a href="productos.php" class="<?= $current_page == 'productos.php' ? 'active' : '' ?>">Productos</a>
   <a href="compras.php" class="<?= $current_page == 'compras.php' ? 'active' : '' ?>">Compras</a>
   <a href="ventas.php" class="<?= $current_page == 'ventas.php' ? 'active' : '' ?>">Ventas</a>
-  <?php if(($_SESSION['rol'] ?? '') === 'admin'): ?>
+<?php if(($_SESSION['rol'] ?? '') === 'admin'): ?>
     <a href="usuarios.php" class="<?= $current_page == 'usuarios.php' ? 'active' : '' ?>">Usuarios</a>
     <a href="reportes.php" class="<?= $current_page == 'reportes.php' ? 'active' : '' ?>">Reportes</a>
+    <a href="inventario.php" class="<?= $current_page == 'inventario.php' ? 'active' : '' ?>">Inventario</a>
   <?php endif; ?>
 </div>
 
