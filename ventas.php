@@ -16,7 +16,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_item'])) {
     $descuento = floatval($_POST['descuento'] ?? 0);
 
     // validar
-    $p = $conexion->query("SELECT * FROM productos WHERE id=$producto_id")->fetch_assoc();
+   // validar
+    $stmt = $conexion->prepare("SELECT * FROM productos WHERE id=?");
+    $stmt->bind_param("i", $producto_id);
+    $stmt->execute();
+    $p = $stmt->get_result()->fetch_assoc();
+    
     if (!$p) { $error = "Producto no válido"; }
     elseif ($cantidad <= 0) { $error = "Cantidad inválida"; }
     elseif ($cantidad > $p['stock']) { $error = "No hay suficiente stock"; }
@@ -61,52 +66,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_sale'])) {
     } elseif (!$metodo_pago) {
         $error = "Seleccione método de pago.";
     } else {
-        // comprobar stock de todos los items antes
-        $ok = true;
+        $total = 0;
         foreach ($_SESSION['carrito'] as $it) {
-            $p = $conexion->query("SELECT stock FROM productos WHERE id=" . intval($it['producto_id']))->fetch_assoc();
-            if (!$p || $p['stock'] < $it['cantidad']) { $ok = false; break; }
+            $total += ($it['precio_unit'] * $it['cantidad']) - $it['descuento'];
         }
-        if (!$ok) {
-            $error = "Stock insuficiente para uno de los productos.";
-        } else {
-            // calcular total y guardar venta
-            $total = 0;
-            foreach ($_SESSION['carrito'] as $it) {
-                $subtotal = ($it['precio_unit'] * $it['cantidad']) - $it['descuento'];
-                $total += $subtotal;
+
+        // Folio seguro con insert_id
+        $folioTemp = "V-TEMP";
+        $stmt = $conexion->prepare("INSERT INTO ventas (folio, total, usuario, metodo_pago, notas) VALUES (?,?,?,?,?)");
+        $stmt->bind_param("sdsss", $folioTemp, $total, $user, $metodo_pago, $notas);
+        $stmt->execute();
+        $venta_id = $conexion->insert_id;
+        $folio = "V-" . str_pad($venta_id, 4, "0", STR_PAD_LEFT);
+        $upd = $conexion->prepare("UPDATE ventas SET folio = ? WHERE id = ?");
+        $upd->bind_param("si", $folio, $venta_id);
+        $upd->execute();
+
+        // Detalle, stock atómico y movimientos
+        $error = '';
+        foreach ($_SESSION['carrito'] as $it) {
+            $subtotal = ($it['precio_unit'] * $it['cantidad']) - $it['descuento'];
+
+            $stmt2 = $conexion->prepare("INSERT INTO ventas_detalle (venta_id, producto_id, cantidad, precio_unit, descuento, subtotal) VALUES (?,?,?,?,?,?)");
+            $stmt2->bind_param("iiiddd", $venta_id, $it['producto_id'], $it['cantidad'], $it['precio_unit'], $it['descuento'], $subtotal);
+            $stmt2->execute();
+
+            // Stock atómico
+            $stmt3 = $conexion->prepare("UPDATE productos SET stock = stock - ? WHERE id = ? AND stock >= ?");
+            $stmt3->bind_param("iii", $it['cantidad'], $it['producto_id'], $it['cantidad']);
+            $stmt3->execute();
+            if ($stmt3->affected_rows === 0) {
+                $error = "Stock insuficiente al confirmar: " . htmlspecialchars($it['nombre']);
+                break;
             }
-            // folio
-            $folio = "V-" . str_pad(($conexion->query("SELECT COUNT(*) c FROM ventas")->fetch_row()[0] + 1), 4, "0", STR_PAD_LEFT);
-            $stmt = $conexion->prepare("INSERT INTO ventas (folio, total, usuario, metodo_pago, notas) VALUES (?,?,?,?,?)");
-            $stmt->bind_param("sdsss", $folio, $total, $user, $metodo_pago, $notas);
-            $stmt->execute();
-            $venta_id = $conexion->insert_id;
 
-            // insertar detalle y actualizar stock
-            foreach ($_SESSION['carrito'] as $it) {
-                $subtotal = ($it['precio_unit'] * $it['cantidad']) - $it['descuento'];
-                $stmt2 = $conexion->prepare("INSERT INTO ventas_detalle (venta_id, producto_id, cantidad, precio_unit, descuento, subtotal) VALUES (?,?,?,?,?,?)");
-                $stmt2->bind_param("iiiddd", $venta_id, $it['producto_id'], $it['cantidad'], $it['precio_unit'], $it['descuento'], $subtotal);
-                $stmt2->execute();
+            // Movimiento con prepared statement
+            $cantNeg = -intval($it['cantidad']);
+            $tipo = 'venta';
+            $stmt4 = $conexion->prepare("INSERT INTO movimientos (tipo, producto, cantidad, usuario, observaciones) VALUES (?,?,?,?,?)");
+            $stmt4->bind_param("ssiss", $tipo, $it['nombre'], $cantNeg, $user, $notas);
+            $stmt4->execute();
+        }
 
-                // descontar stock
-                $conexion->query("UPDATE productos SET stock = stock - ".intval($it['cantidad'])." WHERE id=".intval($it['producto_id']));
-
-                // movimiento
-                $nombreProd = $conexion->query("SELECT nombre FROM productos WHERE id=".$it['producto_id'])->fetch_assoc()['nombre'];
-                $conexion->query("INSERT INTO movimientos (tipo, producto, cantidad, usuario, observaciones) VALUES ('venta', '".$conexion->real_escape_string($nombreProd)."', -".intval($it['cantidad']).", '".$conexion->real_escape_string($user)."', '".$conexion->real_escape_string($notas)."')");
-            }
-
-            // limpiar carrito
-            $_SESSION['carrito'] = [];
-
-            // redirigir a ticket imprimible
-            header("Location: ticket.php?id=$venta_id");
+        if ($error) {
+            header("Location: ventas.php?error=stock");
             exit;
         }
+
+        $_SESSION['carrito'] = [];
+        header("Location: ticket.php?id=$venta_id");
+        exit;
     }
 }
+
 
 // listar productos activos
 $prods = $conexion->query("SELECT id, codigo, nombre, stock, precio_venta FROM productos WHERE estado='activo' ORDER BY nombre");
