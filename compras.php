@@ -178,18 +178,40 @@ $compras = $conexion->query("
     </div>
 
     <div class="form-group">
-      <label>Proveedor</label>
-      <select name="proveedor_id" id="proveedor_id" required>
-        <option value="">Seleccione un proveedor...</option>
+    <label>Proveedor</label>
+    <select name="proveedor_select" id="proveedor_select" onchange="mostrarCampoNuevoProveedor(this.value)">
+        <option value="">-- Seleccione un proveedor --</option>
         <?php 
         $proveedores = $conexion->query("SELECT id, nombre FROM proveedores ORDER BY nombre");
         while($prov = $proveedores->fetch_assoc()): 
         ?>
-          <option value="<?= $prov['id'] ?>"><?= htmlspecialchars($prov['nombre']) ?></option>
+            <option value="<?= $prov['id'] ?>"><?= htmlspecialchars($prov['nombre']) ?></option>
         <?php endwhile; ?>
-      </select>
-      <small style="color:#666;"></small>
+        <option value="__nuevo__" style="color:#2e7d32;">+ Agregar nuevo proveedor</option>
+    </select>
+</div>
+
+<div id="nuevo_proveedor_div" style="display:none; margin-top:10px;">
+    <div class="form-group">
+        <label>Nombre del nuevo proveedor</label>
+        <input type="text" name="nuevo_proveedor" id="nuevo_proveedor" class="form-control" placeholder="Ej. Vidrios del Norte">
+        <input type="hidden" name="proveedor_id" id="proveedor_id" value="">
     </div>
+</div>
+
+<script>
+function mostrarCampoNuevoProveedor(valor) {
+    var div = document.getElementById('nuevo_proveedor_div');
+    if (valor === '__nuevo__') {
+        div.style.display = 'block';
+        document.getElementById('proveedor_id').value = '';
+    } else {
+        div.style.display = 'none';
+        document.getElementById('proveedor_id').value = valor;
+        document.getElementById('nuevo_proveedor').value = '';
+    }
+}
+</script>
 
     <div class="form-group">
       <label>Cantidad</label>
