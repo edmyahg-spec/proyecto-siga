@@ -76,6 +76,22 @@ function generarReporte($tipo, $formato) {
                 ORDER BY fecha DESC
             ");
             break;
+
+            case 'compras':
+    $titulo = 'REPORTE DE COMPRAS';
+    $columnas = ['ID', 'Código', 'Producto', 'Cantidad', 'Precio Unitario', 'Total', 'Proveedor', 'Fecha', 'Usuario'];
+    $result = $conexion->query("
+        SELECT c.id, p.codigo, p.nombre as producto, 
+               c.cantidad, c.precio_compra,
+               (c.cantidad * c.precio_compra) as total,
+               COALESCE(prov.nombre, 'N/A') as proveedor,
+               c.fecha, c.usuario
+        FROM compras c
+        JOIN productos p ON c.producto_id = p.id
+        LEFT JOIN proveedores prov ON c.proveedor_id = prov.id
+        ORDER BY c.fecha DESC
+    ");
+    break;
             
         case 'usuarios':
             $titulo = 'REPORTE DE USUARIOS';
