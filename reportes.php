@@ -34,16 +34,19 @@ function generarReporte($tipo, $formato) {
     $columnas = [];
 
     switch($tipo) {
-        case 'inventario':
-            $titulo = 'REPORTE DE INVENTARIO';
-            $columnas = ['Código', 'Nombre', 'Categoría', 'Proveedor', 'Stock', 'Mínimo', 'Estado'];
-            $result = $conexion->query("
-                SELECT codigo, nombre, categoria, proveedor, stock, stock_min as minimo,
-                       CASE WHEN stock <= stock_min THEN 'BAJO' ELSE 'NORMAL' END as estado
-                FROM productos 
-                ORDER BY nombre
-            ");
-            break;
+       case 'inventario':
+    $titulo = 'REPORTE DE INVENTARIO';
+    $columnas = ['Código', 'Nombre', 'Categoría', 'Proveedor', 'Stock', 'Mínimo', 'Estado'];
+    $result = $conexion->query("
+        SELECT p.codigo, p.nombre, p.categoria, 
+               COALESCE(prov.nombre, p.proveedor, 'N/A') as proveedor,
+               p.stock, p.stock_min as minimo,
+               CASE WHEN p.stock <= p.stock_min THEN 'BAJO' ELSE 'NORMAL' END as estado
+        FROM productos p
+        LEFT JOIN proveedores prov ON p.proveedor_id = prov.id
+        ORDER BY p.nombre
+    ");
+    break;
             
         case 'ventas':
             $titulo = 'REPORTE DE VENTAS';
