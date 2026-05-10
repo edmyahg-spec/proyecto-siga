@@ -7,25 +7,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $producto_id = intval($_POST['producto_id']);
     $cantidad = intval($_POST['cantidad']);
     $precio_compra = floatval($_POST['precio_compra']);
-    $proveedor = trim($_POST['proveedor']);
 
-    if ($producto_id && $cantidad > 0) {
-        $stmt = $conexion->prepare("INSERT INTO compras (producto_id, cantidad, precio_compra, proveedor, usuario) VALUES (?,?,?,?,?)");
+    // Lógica para proveedor
+    $proveedor_id = intval($_POST['proveedor_id'] ?? 0);
+    $nuevo_proveedor = trim($_POST['nuevo_proveedor'] ?? '');
+
+    if ($proveedor_id == 0 && !empty($nuevo_proveedor)) {
+        // Insertar nuevo proveedor
+        $stmt = $conexion->prepare("INSERT INTO proveedores (nombre) VALUES (?)");
+        $stmt->bind_param("s", $nuevo_proveedor);
+        $stmt->execute();
+        $proveedor_id = $conexion->insert_id;
+        $proveedor_nombre = $nuevo_proveedor;
+    } elseif ($proveedor_id > 0) {
+        // Obtener nombre del proveedor existente
+        $res = $conexion->query("SELECT nombre FROM proveedores WHERE id = $proveedor_id");
+        $proveedor_nombre = $res->fetch_assoc()['nombre'];
+    } else {
+        $error = "Debe seleccionar o agregar un proveedor";
+    }
+
+    // Si no hay error, continuar con la compra
+    if (empty($error) && $producto_id && $cantidad > 0) {
+        $stmt = $conexion->prepare("INSERT INTO compras (producto_id, cantidad, precio_compra, proveedor_id, usuario) VALUES (?,?,?,?,?)");
         $usern = $_SESSION['usuario'];
-        $stmt->bind_param("iidss", $producto_id, $cantidad, $precio_compra, $proveedor, $usern);
+        $stmt->bind_param("iidii", $producto_id, $cantidad, $precio_compra, $proveedor_id, $usern);
         $stmt->execute();
 
-        
+        // Actualizar stock
         $conexion->query("UPDATE productos SET stock = stock + $cantidad WHERE id = $producto_id");
 
-        
+        // Obtener nombre del producto
         $p = $conexion->query("SELECT nombre FROM productos WHERE id=$producto_id")->fetch_assoc()['nombre'];
-       $mov = $conexion->prepare("INSERT INTO movimientos (tipo, producto, cantidad, usuario, observaciones) VALUES (?, ?, ?, ?, ?)");
-$tipo = "compra";
-$mov->bind_param("ssiss", $tipo, $p, $cantidad, $usern, $proveedor);
-$mov->execute();
         
-        $conexion->query("INSERT INTO movimientos (tipo, producto, cantidad, usuario, observaciones) VALUES ('compra', '".$conexion->real_escape_string($p)."', $cantidad, '".$conexion->real_escape_string($usern)."', '". $conexion->real_escape_string($proveedor) ."')");
+        // Registrar movimiento (solo una vez)
+        $mov = $conexion->prepare("INSERT INTO movimientos (tipo, producto, cantidad, usuario, observaciones) VALUES (?, ?, ?, ?, ?)");
+        $tipo = "compra";
+        $mov->bind_param("ssiss", $tipo, $p, $cantidad, $usern, $proveedor_nombre);
+        $mov->execute();
 
         header("Location: compras.php?ok=1");
         exit;
@@ -34,13 +53,15 @@ $mov->execute();
     }
 }
 
-$productos = $conexion->query("SELECT id, codigo, nombre, stock FROM productos ORDER BY nombre");
+$productos = $conexion->query("SELECT id, codigo, nombre, precio_compra, stock FROM productos ORDER BY nombre");
 
-
+// Consulta corregida para el historial
 $compras = $conexion->query("
-    SELECT c.id, p.codigo, p.nombre, c.cantidad, c.precio_compra, c.proveedor, c.fecha, c.usuario 
+    SELECT c.id, p.codigo, p.nombre, c.cantidad, c.precio_compra, 
+           prov.nombre as proveedor_nombre, c.fecha, c.usuario 
     FROM compras c 
-    JOIN productos p ON c.producto_id = p.id 
+    JOIN productos p ON c.producto_id = p.id
+    LEFT JOIN proveedores prov ON c.proveedor_id = prov.id
     ORDER BY c.fecha DESC
 ");
 ?>
@@ -262,7 +283,7 @@ function mostrarCampoNuevoProveedor(valor) {
               <td><?= $compra['cantidad'] ?></td>
               <td>$<?= number_format($compra['precio_compra'], 2) ?></td>
               <td>$<?= number_format($total, 2) ?></td>
-              <td><?= htmlspecialchars($compra['proveedor']) ?></td>
+             <td><?= htmlspecialchars($compra['proveedor_nombre'] ?? 'N/A') ?></td>
               <td><?= date('d/m/Y H:i', strtotime($compra['fecha'])) ?></td>
               <td><?= htmlspecialchars($compra['usuario']) ?></td>
             </tr>
