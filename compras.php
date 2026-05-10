@@ -15,13 +15,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->bind_param("iidss", $producto_id, $cantidad, $precio_compra, $proveedor, $usern);
         $stmt->execute();
 
-        // actualizar stock
+        
         $conexion->query("UPDATE productos SET stock = stock + $cantidad WHERE id = $producto_id");
 
-        // movimiento
+        
         $p = $conexion->query("SELECT nombre FROM productos WHERE id=$producto_id")->fetch_assoc()['nombre'];
-        $mov = $conexion->prepare("INSERT INTO movimientos (tipo, producto, cantidad, usuario, observaciones) VALUES ('compra',?,?,?,?,?)");
-        // we'll just insert simple
+       $mov = $conexion->prepare("INSERT INTO movimientos (tipo, producto, cantidad, usuario, observaciones) VALUES (?, ?, ?, ?, ?)");
+$tipo = "compra";
+$mov->bind_param("ssiss", $tipo, $p, $cantidad, $usern, $proveedor);
+$mov->execute();
+        
         $conexion->query("INSERT INTO movimientos (tipo, producto, cantidad, usuario, observaciones) VALUES ('compra', '".$conexion->real_escape_string($p)."', $cantidad, '".$conexion->real_escape_string($usern)."', '". $conexion->real_escape_string($proveedor) ."')");
 
         header("Location: compras.php?ok=1");
@@ -33,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $productos = $conexion->query("SELECT id, codigo, nombre, stock FROM productos ORDER BY nombre");
 
-// Obtener historial de compras
+
 $compras = $conexion->query("
     SELECT c.id, p.codigo, p.nombre, c.cantidad, c.precio_compra, c.proveedor, c.fecha, c.usuario 
     FROM compras c 
@@ -148,41 +151,65 @@ $compras = $conexion->query("
     <div class="alert error"><?= htmlspecialchars($error) ?></div>
     <?php endif; ?>
 
-    <!-- Card para registrar compra -->
-    <div class="card">
-      <h2>Registrar Nueva Compra</h2>
-      <form method="post">
-        <div class="form-group">
-          <label>Producto</label>
-          <select name="producto_id" required>
-            <?php while($p = $productos->fetch_assoc()): ?>
-              <option value="<?= $p['id'] ?>">
-                <?= htmlspecialchars($p['codigo'] . ' - ' . $p['nombre'] . ' (stock: ' . $p['stock'] . ')') ?>
-              </option>
-            <?php endwhile; ?>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label>Cantidad</label>
-          <input type="number" name="cantidad" min="1" required>
-        </div>
-
-        <div class="form-group">
-          <label>Precio compra unitario</label>
-          <input type="number" name="precio_compra" step="0.01" required>
-        </div>
-
-        <div class="form-group">
-          <label>Proveedor</label>
-          <input type="text" name="proveedor" required>
-        </div>
-
-        <div>
-          <button class="btn" type="submit">Registrar compra</button>
-        </div>
-      </form>
+   
+  <div class="card">
+  <h2>Registrar Nueva Compra</h2>
+  <form method="post" id="formCompra">
+    <div class="form-group">
+      <label>Producto</label>
+      <select name="producto_id" id="producto_id" required>
+        <option value="">Seleccione un producto...</option>
+        <?php 
+        $productos = $conexion->query("SELECT id, codigo, nombre, precio_compra, stock FROM productos ORDER BY nombre");
+        while($p = $productos->fetch_assoc()): 
+        ?>
+          <option value="<?= $p['id'] ?>" data-precio="<?= $p['precio_compra'] ?>">
+            <?= htmlspecialchars($p['codigo'] . ' - ' . $p['nombre'] . ' (stock: ' . $p['stock'] . ')') ?>
+          </option>
+        <?php endwhile; ?>
+      </select>
     </div>
+
+    <div class="form-group">
+      <label>Precio compra unitario</label>
+      <input type="number" name="precio_compra" id="precio_compra" step="0.01" readonly 
+             style="background:#f0f0f0; cursor:not-allowed;" required>
+      <small style="color:#666;"> </small>
+    </div>
+
+    <div class="form-group">
+      <label>Proveedor</label>
+      <select name="proveedor_id" id="proveedor_id" required>
+        <option value="">Seleccione un proveedor...</option>
+        <?php 
+        $proveedores = $conexion->query("SELECT id, nombre FROM proveedores ORDER BY nombre");
+        while($prov = $proveedores->fetch_assoc()): 
+        ?>
+          <option value="<?= $prov['id'] ?>"><?= htmlspecialchars($prov['nombre']) ?></option>
+        <?php endwhile; ?>
+      </select>
+      <small style="color:#666;"></small>
+    </div>
+
+    <div class="form-group">
+      <label>Cantidad</label>
+      <input type="number" name="cantidad" min="1" required>
+    </div>
+
+    <div>
+      <button class="btn" type="submit">Registrar compra</button>
+    </div>
+  </form>
+</div>
+
+<script>
+
+  document.getElementById('producto_id').addEventListener('change', function() {
+    const selected = this.options[this.selectedIndex];
+    const precio = selected.getAttribute('data-precio');
+    document.getElementById('precio_compra').value = precio ? parseFloat(precio).toFixed(2) : '';
+  });
+</script>
 
     <!-- Card para historial de compras -->
     <div class="card">

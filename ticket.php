@@ -12,11 +12,28 @@ if (!$id) {
     exit; 
 }
 
-// Obtener datos de la venta
-$venta = $conexion->query("SELECT * FROM ventas WHERE id=$id")->fetch_assoc();
+
+$stmtVenta = $conexion->prepare("SELECT * FROM ventas WHERE id=?");
+$stmtVenta->bind_param("i", $id);
+$stmtVenta->execute();
+$venta = $stmtVenta->get_result()->fetch_assoc();
 if (!$venta) {
     echo "<div style='padding:20px; text-align:center;'>Venta no encontrada en la base de datos</div>";
     exit;
+}
+
+// Usar precio_unit de ventas_detalle (precio real al momento de la venta)
+$stmtDet = $conexion->prepare("SELECT vd.*, p.nombre, p.codigo, vd.precio_unit as precio_unitario, vd.descuento 
+                                FROM ventas_detalle vd 
+                                LEFT JOIN productos p ON vd.producto_id = p.id 
+                                WHERE vd.venta_id = ?");
+$stmtDet->bind_param("i", $id);
+$stmtDet->execute();
+$det = $stmtDet->get_result();
+if (!$det) {
+    echo "<div style='padding:20px; text-align:center;'>Error al cargar los detalles de la venta</div>";
+    exit;
+
 }
 
 // Obtener detalles de la venta - CORREGIDO: usar precio_venta

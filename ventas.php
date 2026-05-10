@@ -3,10 +3,10 @@ session_start();
 if (!isset($_SESSION['usuario'])) { header("Location: login.php"); exit; }
 require "conexion.php";
 
-// iniciar carrito en sesión
+
 if (!isset($_SESSION['carrito'])) $_SESSION['carrito'] = [];
 
-// acciones: agregar item, eliminar item, vaciar carrito
+
 $action = $_GET['action'] ?? null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_item'])) {
@@ -15,8 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_item'])) {
     $precio_unit = floatval($_POST['precio_unit']);
     $descuento = floatval($_POST['descuento'] ?? 0);
 
-    // validar
-   // validar
+ 
     $stmt = $conexion->prepare("SELECT * FROM productos WHERE id=?");
     $stmt->bind_param("i", $producto_id);
     $stmt->execute();
@@ -26,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_item'])) {
     elseif ($cantidad <= 0) { $error = "Cantidad inválida"; }
     elseif ($cantidad > $p['stock']) { $error = "No hay suficiente stock"; }
     else {
-        // push al carrito
+   
         $_SESSION['carrito'][] = [
             'producto_id' => $producto_id,
             'codigo' => $p['codigo'],
@@ -55,7 +54,7 @@ if ($action === 'clear') {
     exit;
 }
 
-// confirmar venta
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_sale'])) {
     $metodo_pago = $_POST['metodo_pago'] ?? '';
     $notas = $_POST['notas'] ?? '';
@@ -71,7 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_sale'])) {
             $total += ($it['precio_unit'] * $it['cantidad']) - $it['descuento'];
         }
 
-        // Folio seguro con insert_id
+   
         $folioTemp = "V-TEMP";
         $stmt = $conexion->prepare("INSERT INTO ventas (folio, total, usuario, metodo_pago, notas) VALUES (?,?,?,?,?)");
         $stmt->bind_param("sdsss", $folioTemp, $total, $user, $metodo_pago, $notas);
@@ -82,13 +81,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_sale'])) {
         $upd->bind_param("si", $folio, $venta_id);
         $upd->execute();
 
-        // Detalle, stock atómico y movimientos
+    
         $error = '';
         foreach ($_SESSION['carrito'] as $it) {
             $subtotal = ($it['precio_unit'] * $it['cantidad']) - $it['descuento'];
 
             $stmt2 = $conexion->prepare("INSERT INTO ventas_detalle (venta_id, producto_id, cantidad, precio_unit, descuento, subtotal) VALUES (?,?,?,?,?,?)");
             $stmt2->bind_param("iiiddd", $venta_id, $it['producto_id'], $it['cantidad'], $it['precio_unit'], $it['descuento'], $subtotal);
+            $stmt2->execute();
+
+         
+            $stmt3 = $conexion->prepare("UPDATE productos SET stock = stock - ? WHERE id = ? AND stock >= ?");
+            $stmt3->bind_param("iii", $it['cantidad'], $it['producto_id'], $it['cantidad']);
+            $stmt3->execute();
+            if ($stmt3->affected_rows === 0) {
+               // Transacción para revertir todo si algo falla
+        $conexion->begin_transaction();
+        $error = '';
+
+        foreach ($_SESSION['carrito'] as $it) {
+            // Tomar precio desde BD, no del formulario
+            $stmtPrecio = $conexion->prepare("SELECT precio_venta FROM productos WHERE id=?");
+            $stmtPrecio->bind_param("i", $it['producto_id']);
+            $stmtPrecio->execute();
+            $precioReal = $stmtPrecio->get_result()->fetch_assoc()['precio_venta'] ?? 0;
+
+            $subtotal = ($precioReal * $it['cantidad']) - $it['descuento'];
+
+            $stmt2 = $conexion->prepare("INSERT INTO ventas_detalle (venta_id, producto_id, cantidad, precio_unit, descuento, subtotal) VALUES (?,?,?,?,?,?)");
+            $stmt2->bind_param("iiiddd", $venta_id, $it['producto_id'], $it['cantidad'], $precioReal, $it['descuento'], $subtotal);
             $stmt2->execute();
 
             // Stock atómico
@@ -98,6 +119,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_sale'])) {
             if ($stmt3->affected_rows === 0) {
                 $error = "Stock insuficiente al confirmar: " . htmlspecialchars($it['nombre']);
                 break;
+            }
+
+            // Movimiento
+            $cantNeg = -intval($it['cantidad']);
+            $tipo = 'venta';
+            $stmt4 = $conexion->prepare("INSERT INTO movimientos (tipo, producto, cantidad, usuario, observaciones) VALUES (?,?,?,?,?)");
+            $stmt4->bind_param("ssiss", $tipo, $it['nombre'], $cantNeg, $user, $notas);
+            $stmt4->execute();
+        }
+
+        if ($error) {
+            // Revertir todo
+            $conexion->rollback();
+            header("Location: ventas.php?error=stock");
+            exit;
+        }
+
+        // Todo OK — confirmar transacción
+        $conexion->commit();
+
+        // Alerta solo si regresa a ventas
+        $codigos = array_map(fn($it) => $it['codigo'], $_SESSION['carrito']);
+        $_SESSION['venta_alerta'] = "Venta registrada: " . implode(', ', $codigos);
+        $_SESSION['carrito'] = [];
+        header("Location: ticket.php?id=$venta_id");
+        exit;
             }
 
             // Movimiento con prepared statement
@@ -327,7 +374,7 @@ $ventas_recientes = $conexion->query("
       <button onclick="document.getElementById('ventaAlerta').style.display='none'" style="background:none; border:none; cursor:pointer; font-size:16px; color:#155724;">✕</button>
     </div>
   <?php unset($_SESSION['venta_alerta']); endif; ?>
-  
+
 
   <div class="ventas-grid">
     <!-- Formulario Agregar Producto -->

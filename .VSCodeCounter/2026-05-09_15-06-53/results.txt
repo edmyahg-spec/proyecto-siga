@@ -1,0 +1,46 @@
+Date : 2026-05-09 15:06:53
+Directory : c:\Apache24\htdocs\sistema_vidrios_nvo
+Total : 16 files,  4105 codes, 64 comments, 587 blanks, all 4756 lines
+
+Languages
++------------+------------+------------+------------+------------+------------+
+| language   | files      | code       | comment    | blank      | total      |
++------------+------------+------------+------------+------------+------------+
+| PHP        |         14 |      4,055 |         63 |        584 |      4,702 |
+| PostCSS    |          1 |         38 |          0 |          2 |         40 |
+| JavaScript |          1 |         12 |          1 |          1 |         14 |
++------------+------------+------------+------------+------------+------------+
+
+Directories
++------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                       | files      | code       | comment    | blank      | total      |
++------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                          |         16 |      4,105 |         64 |        587 |      4,756 |
+| . (Files)                                                  |         13 |      4,011 |         63 |        573 |      4,647 |
+| api                                                        |          1 |         44 |          0 |         11 |         55 |
+| css                                                        |          1 |         38 |          0 |          2 |         40 |
+| js                                                         |          1 |         12 |          1 |          1 |         14 |
++------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++------------------------------------------------------------+------------+------------+------------+------------+------------+
+| filename                                                   | language   | code       | comment    | blank      | total      |
++------------------------------------------------------------+------------+------------+------------+------------+------------+
+| c:\Apache24\htdocs\sistema_vidrios_nvo\api\login_check.php | PHP        |         44 |          0 |         11 |         55 |
+| c:\Apache24\htdocs\sistema_vidrios_nvo\compras.php         | PHP        |        211 |          0 |         20 |        231 |
+| c:\Apache24\htdocs\sistema_vidrios_nvo\create_admin.php    | PHP        |         22 |          0 |          4 |         26 |
+| c:\Apache24\htdocs\sistema_vidrios_nvo\css\estilos.css     | PostCSS    |         38 |          0 |          2 |         40 |
+| c:\Apache24\htdocs\sistema_vidrios_nvo\dashboard.php       | PHP        |        735 |         10 |         96 |        841 |
+| c:\Apache24\htdocs\sistema_vidrios_nvo\index.php           | PHP        |          3 |          0 |          1 |          4 |
+| c:\Apache24\htdocs\sistema_vidrios_nvo\inventario.php      | PHP        |        298 |          3 |         45 |        346 |
+| c:\Apache24\htdocs\sistema_vidrios_nvo\js\funciones.js     | JavaScript |         12 |          1 |          1 |         14 |
+| c:\Apache24\htdocs\sistema_vidrios_nvo\login.php           | PHP        |        212 |          0 |         32 |        244 |
+| c:\Apache24\htdocs\sistema_vidrios_nvo\logout.php          | PHP        |          6 |          0 |          1 |          7 |
+| c:\Apache24\htdocs\sistema_vidrios_nvo\menu.php            | PHP        |        188 |          6 |         29 |        223 |
+| c:\Apache24\htdocs\sistema_vidrios_nvo\productos.php       | PHP        |        453 |         10 |         71 |        534 |
+| c:\Apache24\htdocs\sistema_vidrios_nvo\reportes.php        | PHP        |        703 |         14 |         94 |        811 |
+| c:\Apache24\htdocs\sistema_vidrios_nvo\ticket.php          | PHP        |        362 |          5 |         51 |        418 |
+| c:\Apache24\htdocs\sistema_vidrios_nvo\usuarios.php        | PHP        |        346 |          2 |         48 |        396 |
+| c:\Apache24\htdocs\sistema_vidrios_nvo\ventas.php          | PHP        |        472 |         13 |         81 |        566 |
+| Total                                                      |            |      4,105 |         64 |        587 |      4,756 |
++------------------------------------------------------------+------------+------------+------------+------------+------------+

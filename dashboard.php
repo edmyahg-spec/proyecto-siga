@@ -567,6 +567,15 @@ $hayCategorias = $stockPorCategoria->num_rows > 0;
         </div>
       </div>
 
+      <?php if ($_SESSION['rol'] === 'admin'): ?>
+      <div class="card card-ventas-hoy">
+        <h3>Ventas Hoy</h3>
+        <div class="value">$<?= number_format($ventasHoy,2) ?></div>
+        <div class="card-footer">
+            Total vendido hoy
+        </div>
+      </div>
+
       <div class="card card-compras-hoy">
         <h3>Compras Hoy</h3>
         <div class="value">$<?= number_format($comprasHoy,2) ?></div>
@@ -574,6 +583,23 @@ $hayCategorias = $stockPorCategoria->num_rows > 0;
             Total comprado hoy
         </div>
       </div>
+
+      <div class="card card-usuarios">
+        <h3>Usuarios</h3>
+        <div class="value"><?= $totalUsuarios ?></div>
+        <div class="card-footer">
+            Usuarios del sistema
+        </div>
+      </div>
+
+      <div class="card card-ventas-mes">
+        <h3>Ventas del Mes</h3>
+        <div class="value">$<?= number_format($ventasMes,2) ?></div>
+        <div class="card-footer">
+            Total del mes actual
+        </div>
+      </div>
+      <?php endif; ?>
 
       <div class="card card-usuarios">
         <h3>Usuarios</h3>
@@ -685,6 +711,11 @@ $hayCategorias = $stockPorCategoria->num_rows > 0;
             </div>
         </div>
     </div>
+
+    
+
+  </div>
+</main>
   </div>
 </main>
 

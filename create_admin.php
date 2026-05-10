@@ -1,6 +1,5 @@
 <?php
-// Ejecuta este archivo una vez desde el navegador para crear admin.
-// Luego bórralo por seguridad.
+
 require "conexion.php";
 
 $usuario = "admin";
