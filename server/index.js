@@ -736,6 +736,69 @@ app.get('/api/inventario/stock', authenticateToken, (req, res) => {
     });
 });
 
+// ============== CREAR PRODUCTO ==============
+app.post('/api/productos', authenticateToken, (req, res) => {
+    const { codigo, nombre, categoria, proveedor, precio_compra, precio_venta, stock, stock_min, estado } = req.body;
+
+    if (!codigo || !nombre || !categoria) {
+        return res.status(400).json({ error: 'Código, nombre y categoría son requeridos' });
+    }
+
+    db.query("SELECT id FROM productos WHERE codigo = ?", [codigo], (err, results) => {
+        if (err) return res.status(500).json({ error: 'Error del servidor' });
+        if (results.length > 0) return res.status(400).json({ error: 'El código de producto ya existe' });
+
+        db.query(
+            "INSERT INTO productos (codigo, nombre, categoria, proveedor, precio_compra, precio_venta, stock, stock_min, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [codigo, nombre, categoria, proveedor || '', precio_compra || 0, precio_venta || 0, stock || 0, stock_min || 0, estado || 'activo'],
+            (err, result) => {
+                if (err) {
+                    console.error(err);
+                    return res.status(500).json({ error: 'Error al crear producto' });
+                }
+                res.json({ success: true, id: result.insertId, message: 'Producto creado' });
+            }
+        );
+    });
+});
+
+// ============== EDITAR PRODUCTO ==============
+app.put('/api/productos/:id', authenticateToken, (req, res) => {
+    const { id } = req.params;
+    const { nombre, categoria, proveedor, precio_compra, precio_venta, stock, stock_min, estado } = req.body;
+
+    if (!nombre || !categoria) {
+        return res.status(400).json({ error: 'Nombre y categoría son requeridos' });
+    }
+
+    db.query(
+        "UPDATE productos SET nombre=?, categoria=?, proveedor=?, precio_compra=?, precio_venta=?, stock=?, stock_min=?, estado=? WHERE id=?",
+        [nombre, categoria, proveedor || '', precio_compra || 0, precio_venta || 0, stock || 0, stock_min || 0, estado || 'activo', id],
+        (err, result) => {
+            if (err) {
+                console.error(err);
+                return res.status(500).json({ error: 'Error al actualizar producto' });
+            }
+            if (result.affectedRows === 0) return res.status(404).json({ error: 'Producto no encontrado' });
+            res.json({ success: true, message: 'Producto actualizado' });
+        }
+    );
+});
+
+// ============== ELIMINAR PRODUCTO ==============
+app.delete('/api/productos/:id', authenticateToken, (req, res) => {
+    const { id } = req.params;
+
+    db.query("DELETE FROM productos WHERE id = ?", [id], (err, result) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ error: 'Error al eliminar producto' });
+        }
+        if (result.affectedRows === 0) return res.status(404).json({ error: 'Producto no encontrado' });
+        res.json({ success: true, message: 'Producto eliminado' });
+    });
+});
+
 app.get('/api/inventario/movimientos', authenticateToken, (req, res) => {
     const { tipo, producto, desde, hasta } = req.query;
     

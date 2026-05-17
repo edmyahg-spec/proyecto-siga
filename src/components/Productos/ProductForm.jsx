@@ -33,11 +33,11 @@ export default function ProductForm({ categorias, editProduct, onSave, onCancel 
     }
   }, [editProduct]);
 
-  const validate = () => {
+  const validate = (finalCategoria = formData.categoria) => {
     const newErrors = {};
     if (!formData.codigo) newErrors.codigo = 'El código es requerido';
     if (!formData.nombre) newErrors.nombre = 'El nombre es requerido';
-    if (!formData.categoria && !newCategory) newErrors.categoria = 'La categoría es requerida';
+    if (!finalCategoria) newErrors.categoria = 'La categoría es requerida';
     if (formData.precio_venta < formData.precio_compra) {
       newErrors.precio_venta = 'El precio de venta no puede ser menor al precio de compra';
     }
@@ -50,14 +50,10 @@ export default function ProductForm({ categorias, editProduct, onSave, onCancel 
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    const finalCategoria = showNewCategory ? newCategory : formData.categoria;
-    if (!finalCategoria) {
-      setErrors({ ...errors, categoria: 'La categoría es requerida' });
-      return;
-    }
 
-    if (!validate()) return;
+    const finalCategoria = showNewCategory ? newCategory : formData.categoria;
+
+    if (!validate(finalCategoria)) return;
 
     setLoading(true);
     try {
