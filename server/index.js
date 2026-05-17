@@ -3,6 +3,7 @@ const cors = require('cors');
 const mysql = require('mysql2');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const PDFDocument = require('pdfkit');
 
 const app = express();
 const PORT = 3001;
@@ -30,8 +31,7 @@ db.connect((err) => {
         return;
     }
     console.log('✓ Conectado a MySQL');
-    
-    // Crear tabla de usuarios si no existe
+
     const createTable = `
         CREATE TABLE IF NOT EXISTS usuarios (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -43,14 +43,13 @@ db.connect((err) => {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     `;
-    
+
     db.query(createTable, (err) => {
         if (err) {
             console.error('Error creando tabla:', err);
         } else {
             console.log('✓ Tabla usuarios verificada');
-            
-            // Insertar usuario admin si no existe
+
             const checkAdmin = "SELECT * FROM usuarios WHERE usuario = 'admin'";
             db.query(checkAdmin, async (err, results) => {
                 if (err) return;
@@ -66,63 +65,123 @@ db.connect((err) => {
     });
 });
 
-// ============== RUTAS DE AUTENTICACIÓN ==============
+// ============================================================
+// HELPERS PDF
+// ============================================================
+
+function pdfHeader(doc, titulo) {
+    doc.fontSize(20).font('Helvetica-Bold').text('Sistema Vidrios & Aluminios', { align: 'center' });
+    doc.fontSize(14).font('Helvetica').text(titulo, { align: 'center' });
+    doc.fontSize(9).fillColor('#666666').text(`Generado: ${new Date().toLocaleString('es-MX')}`, { align: 'center' });
+    doc.fillColor('#000000').moveDown(0.8);
+    doc.moveTo(40, doc.y).lineTo(555, doc.y).lineWidth(1.5).stroke();
+    doc.moveDown(0.5);
+}
+
+function pdfTableHeader(doc, columns) {
+    const y = doc.y;
+    doc.font('Helvetica-Bold').fontSize(8).fillColor('#ffffff');
+    doc.rect(40, y - 2, 515, 14).fill('#4a4a4a');
+    columns.forEach(col => {
+        doc.fillColor('#ffffff').text(col.label, col.x, y, { width: col.width, align: col.align || 'left' });
+    });
+    doc.fillColor('#000000').font('Helvetica').moveDown(0.2);
+}
+
+function pdfTableRow(doc, columns, row, index) {
+    if (doc.y > 720) doc.addPage();
+    const y = doc.y;
+
+    // Calcular la altura real de la fila según el texto más alto
+    let maxHeight = 0;
+    columns.forEach(col => {
+        const text = String(row[col.key] ?? '');
+        const h = doc.heightOfString(text, { width: col.width });
+        if (h > maxHeight) maxHeight = h;
+    });
+
+    const rowHeight = maxHeight + 4;
+
+    // Fondo alternado
+    if (index % 2 === 0) {
+        doc.rect(40, y - 1, 515, rowHeight).fill('#f5f5f5');
+    }
+
+    // Dibujar texto de cada columna
+    doc.fillColor('#000000').font('Helvetica').fontSize(7.5);
+    columns.forEach(col => {
+        doc.text(String(row[col.key] ?? ''), col.x, y, { width: col.width, align: col.align || 'left' });
+    });
+
+    // Avanzar exactamente la altura calculada
+    doc.y = y + rowHeight;
+}
+
+function pdfFooter(doc, total) {
+    doc.moveDown(0.5);
+    doc.moveTo(40, doc.y).lineTo(555, doc.y).lineWidth(0.5).stroke();
+    doc.moveDown(0.3);
+    doc.fontSize(8).fillColor('#444444').text(`Total de registros: ${total}`, 40);
+}
+
+// ============================================================
+// AUTENTICACIÓN
+// ============================================================
+
 app.post('/api/auth/login', (req, res) => {
     const { usuario, password } = req.body;
-    
+
     if (!usuario || !password) {
         return res.status(400).json({ error: 'Usuario y contraseña requeridos' });
     }
-    
+
     const query = 'SELECT id, nombre, usuario, password, rol, estado FROM usuarios WHERE usuario = ?';
     db.query(query, [usuario], async (err, results) => {
         if (err) {
             console.error('Error en consulta:', err);
             return res.status(500).json({ error: 'Error del servidor' });
         }
-        
+
         if (results.length === 0) {
             return res.status(401).json({ error: 'Credenciales incorrectas' });
         }
-        
+
         const user = results[0];
-        
+
         if (user.estado !== 'activo') {
             return res.status(401).json({ error: 'Usuario inactivo' });
         }
-        
+
         const validPassword = await bcrypt.compare(password, user.password);
         if (!validPassword) {
             return res.status(401).json({ error: 'Credenciales incorrectas' });
         }
-        
+
         const token = jwt.sign(
             { id: user.id, usuario: user.usuario, rol: user.rol, nombre: user.nombre },
             'mi-secreto-jwt-2024',
             { expiresIn: '8h' }
         );
-        
+
         res.json({
             token,
-            user: {
-                id: user.id,
-                nombre: user.nombre,
-                usuario: user.usuario,
-                rol: user.rol
-            }
+            user: { id: user.id, nombre: user.nombre, usuario: user.usuario, rol: user.rol }
         });
     });
 });
 
-// ============== MIDDLEWARE DE AUTENTICACIÓN ==============
+// ============================================================
+// MIDDLEWARE DE AUTENTICACIÓN
+// ============================================================
+
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
-    
+
     if (!token) {
         return res.status(401).json({ error: 'Token no proporcionado' });
     }
-    
+
     jwt.verify(token, 'mi-secreto-jwt-2024', (err, user) => {
         if (err) {
             return res.status(403).json({ error: 'Token inválido' });
@@ -132,8 +191,13 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
+// ============================================================
+// PRODUCTOS
+// ============================================================
+
 app.get('/api/productos/activos', authenticateToken, (req, res) => {
-    db.query("SELECT id, codigo, nombre, stock, precio_venta, precio_compra, proveedor_id FROM productos WHERE estado='activo' ORDER BY nombre", 
+    db.query(
+        "SELECT id, codigo, nombre, stock, precio_venta, precio_compra, proveedor_id FROM productos WHERE estado='activo' ORDER BY nombre",
         (err, results) => {
             if (err) {
                 console.error(err);
@@ -144,12 +208,8 @@ app.get('/api/productos/activos', authenticateToken, (req, res) => {
     );
 });
 
-// ============== RUTAS DE PRODUCTOS ==============
-
-// Obtener todos los productos
 app.get('/api/productos', authenticateToken, (req, res) => {
     const query = "SELECT p.*, prov.nombre as proveedor_nombre FROM productos p LEFT JOIN proveedores prov ON p.proveedor_id = prov.id ORDER BY p.id DESC";
-    
     db.query(query, (err, results) => {
         if (err) {
             console.error('Error al cargar productos:', err);
@@ -159,23 +219,8 @@ app.get('/api/productos', authenticateToken, (req, res) => {
     });
 });
 
-// Obtener productos activos (para ventas y compras)
-app.get('/api/productos/activos', authenticateToken, (req, res) => {
-    const query = "SELECT id, codigo, nombre, stock, precio_venta, precio_compra, proveedor_id FROM productos WHERE estado='activo' ORDER BY nombre";
-    
-    db.query(query, (err, results) => {
-        if (err) {
-            console.error('Error al cargar productos activos:', err);
-            return res.status(500).json({ error: 'Error al cargar productos' });
-        }
-        res.json(results);
-    });
-});
-
-// Obtener categorías de productos
 app.get('/api/productos/categorias', authenticateToken, (req, res) => {
     const query = "SELECT DISTINCT categoria FROM productos WHERE categoria IS NOT NULL AND categoria != '' ORDER BY categoria";
-    
     db.query(query, (err, results) => {
         if (err) {
             console.error('Error al cargar categorías:', err);
@@ -185,7 +230,6 @@ app.get('/api/productos/categorias', authenticateToken, (req, res) => {
     });
 });
 
-// Crear producto
 app.post('/api/productos', authenticateToken, (req, res) => {
     const { codigo, nombre, categoria, proveedor_id, precio_compra, precio_venta, stock, stock_min, estado } = req.body;
 
@@ -193,21 +237,20 @@ app.post('/api/productos', authenticateToken, (req, res) => {
         return res.status(400).json({ error: 'Código, nombre y categoría son requeridos' });
     }
 
-    // Verificar si el código ya existe
     db.query("SELECT id FROM productos WHERE codigo = ?", [codigo], (err, results) => {
         if (err) {
             console.error(err);
             return res.status(500).json({ error: 'Error del servidor' });
         }
-        
+
         if (results.length > 0) {
             return res.status(400).json({ error: 'El código de producto ya existe' });
         }
 
         const query = `INSERT INTO productos (codigo, nombre, categoria, proveedor_id, precio_compra, precio_venta, stock, stock_min, estado) 
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-        
-        db.query(query, [codigo, nombre, categoria, proveedor_id || null, precio_compra || 0, precio_venta || 0, stock || 0, stock_min || 0, estado || 'activo'], 
+
+        db.query(query, [codigo, nombre, categoria, proveedor_id || null, precio_compra || 0, precio_venta || 0, stock || 0, stock_min || 0, estado || 'activo'],
             (err, result) => {
                 if (err) {
                     console.error('Error al crear producto:', err);
@@ -219,7 +262,6 @@ app.post('/api/productos', authenticateToken, (req, res) => {
     });
 });
 
-// Actualizar producto
 app.put('/api/productos/:id', authenticateToken, (req, res) => {
     const { id } = req.params;
     const { nombre, categoria, proveedor_id, precio_compra, precio_venta, stock, stock_min, estado } = req.body;
@@ -229,8 +271,8 @@ app.put('/api/productos/:id', authenticateToken, (req, res) => {
     }
 
     const query = `UPDATE productos SET nombre=?, categoria=?, proveedor_id=?, precio_compra=?, precio_venta=?, stock=?, stock_min=?, estado=? WHERE id=?`;
-    
-    db.query(query, [nombre, categoria, proveedor_id || null, precio_compra || 0, precio_venta || 0, stock || 0, stock_min || 0, estado || 'activo', id], 
+
+    db.query(query, [nombre, categoria, proveedor_id || null, precio_compra || 0, precio_venta || 0, stock || 0, stock_min || 0, estado || 'activo', id],
         (err, result) => {
             if (err) {
                 console.error('Error al actualizar producto:', err);
@@ -244,10 +286,8 @@ app.put('/api/productos/:id', authenticateToken, (req, res) => {
     );
 });
 
-// Eliminar producto
 app.delete('/api/productos/:id', authenticateToken, (req, res) => {
     const { id } = req.params;
-
     db.query("DELETE FROM productos WHERE id = ?", [id], (err, result) => {
         if (err) {
             console.error('Error al eliminar producto:', err);
@@ -260,20 +300,22 @@ app.delete('/api/productos/:id', authenticateToken, (req, res) => {
     });
 });
 
-app.get('/api/productos/categorias', authenticateToken, (req, res) => {
-    db.query("SELECT DISTINCT categoria FROM productos WHERE categoria IS NOT NULL AND categoria != '' ORDER BY categoria", (err, results) => {
+// ============================================================
+// PROVEEDORES
+// ============================================================
+
+app.get('/api/proveedores', authenticateToken, (req, res) => {
+    db.query("SELECT id, nombre FROM proveedores ORDER BY nombre", (err, results) => {
         if (err) {
-            console.error(err);
-            return res.status(500).json({ error: 'Error al cargar categorías' });
+            console.error('Error al cargar proveedores:', err);
+            return res.status(500).json({ error: 'Error al cargar proveedores' });
         }
-        res.json(results.map(r => r.categoria));
+        res.json(results);
     });
 });
 
-app.get('/api/proveedores', authenticateToken, (req, res) => {
-    const query = "SELECT id, nombre FROM proveedores ORDER BY nombre";
-    
-    db.query(query, (err, results) => {
+app.get('/api/proveedores/todos', authenticateToken, (req, res) => {
+    db.query("SELECT id, nombre FROM proveedores ORDER BY nombre", (err, results) => {
         if (err) {
             console.error('Error al cargar proveedores:', err);
             return res.status(500).json({ error: 'Error al cargar proveedores' });
@@ -284,21 +326,21 @@ app.get('/api/proveedores', authenticateToken, (req, res) => {
 
 app.post('/api/proveedores', authenticateToken, (req, res) => {
     const { nombre } = req.body;
-    
+
     if (!nombre || nombre.trim() === '') {
         return res.status(400).json({ error: 'El nombre del proveedor es requerido' });
     }
-    
+
     db.query("SELECT id FROM proveedores WHERE nombre = ?", [nombre], (err, results) => {
         if (err) {
             console.error(err);
             return res.status(500).json({ error: 'Error del servidor' });
         }
-        
+
         if (results.length > 0) {
             return res.status(400).json({ error: 'El proveedor ya existe' });
         }
-        
+
         db.query("INSERT INTO proveedores (nombre) VALUES (?)", [nombre], (err, result) => {
             if (err) {
                 console.error(err);
@@ -309,19 +351,20 @@ app.post('/api/proveedores', authenticateToken, (req, res) => {
     });
 });
 
+// ============================================================
+// VENTAS
+// ============================================================
 
-
-// ============== RUTAS DE VENTAS ==============
 app.post('/api/ventas', authenticateToken, (req, res) => {
     const { items, metodo_pago, notas, total } = req.body;
     const user = req.user.usuario;
-    
+
     if (!items || items.length === 0) {
         return res.status(400).json({ error: 'No hay productos en la venta' });
     }
-    
+
     const folioTemp = 'V-TEMP';
-    
+
     db.query(
         "INSERT INTO ventas (folio, total, usuario, metodo_pago, notas) VALUES (?, ?, ?, ?, ?)",
         [folioTemp, total, user, metodo_pago, notas],
@@ -330,18 +373,18 @@ app.post('/api/ventas', authenticateToken, (req, res) => {
                 console.error('Error al insertar venta:', err);
                 return res.status(500).json({ error: 'Error al registrar venta' });
             }
-            
+
             const ventaId = result.insertId;
             const folio = `V-${String(ventaId).padStart(4, '0')}`;
-            
+
             db.query("UPDATE ventas SET folio = ? WHERE id = ?", [folio, ventaId]);
-            
+
             let processed = 0;
             let errorOccurred = false;
-            
+
             items.forEach((item) => {
                 const importe = (item.precio_unit * item.cantidad) - (item.descuento || 0);
-                
+
                 db.query(
                     "INSERT INTO ventas_detalle (venta_id, producto_id, cantidad, precio_unit, descuento, subtotal) VALUES (?, ?, ?, ?, ?, ?)",
                     [ventaId, item.id, item.cantidad, item.precio_unit, item.descuento || 0, importe],
@@ -351,7 +394,7 @@ app.post('/api/ventas', authenticateToken, (req, res) => {
                             errorOccurred = true;
                             return;
                         }
-                        
+
                         db.query(
                             "UPDATE productos SET stock = stock - ? WHERE id = ? AND stock >= ?",
                             [item.cantidad, item.id, item.cantidad],
@@ -361,19 +404,16 @@ app.post('/api/ventas', authenticateToken, (req, res) => {
                                     errorOccurred = true;
                                     return;
                                 }
-                                
-                                // ✅ REGISTRAR MOVIMIENTO CON OBSERVACIONES DEL USUARIO
+
                                 const cantidadNegativa = -item.cantidad;
                                 const observacionesVenta = notas && notas.trim() !== '' ? notas : `Venta ${folio}`;
-                                
+
                                 db.query(
                                     "INSERT INTO movimientos (tipo, producto, cantidad, usuario, observaciones) VALUES (?, ?, ?, ?, ?)",
                                     ['venta', item.nombre, cantidadNegativa, user, observacionesVenta],
-                                    (err) => {
-                                        if (err) console.error('Error al registrar movimiento:', err);
-                                    }
+                                    (err) => { if (err) console.error('Error al registrar movimiento:', err); }
                                 );
-                                
+
                                 processed++;
                                 if (processed === items.length && !errorOccurred) {
                                     res.json({ success: true, venta_id: ventaId, folio });
@@ -411,14 +451,19 @@ app.get('/api/ventas/recientes', authenticateToken, (req, res) => {
 
 app.get('/api/ventas/:id/ticket', authenticateToken, (req, res) => {
     const id = req.params.id;
-    
+
     db.query("SELECT * FROM ventas WHERE id = ?", [id], (err, ventaRows) => {
-        if (err || ventaRows.length === 0) {
+        if (err) {
+            console.error('Error en venta:', err);
+            return res.status(500).json({ error: 'Error al cargar venta' });
+        }
+
+        if (ventaRows.length === 0) {
             return res.status(404).json({ error: 'Venta no encontrada' });
         }
-        
+
         const venta = ventaRows[0];
-        
+
         db.query(`
             SELECT vd.*, p.nombre, p.codigo 
             FROM ventas_detalle vd 
@@ -426,28 +471,33 @@ app.get('/api/ventas/:id/ticket', authenticateToken, (req, res) => {
             WHERE vd.venta_id = ?
         `, [id], (err, detalleRows) => {
             if (err) {
+                console.error('Error en detalles:', err);
                 return res.status(500).json({ error: 'Error al cargar detalles' });
             }
-            
-            let subtotal = 0;
-            let totalDescuento = 0;
-            detalleRows.forEach(item => {
-                subtotal += item.precio_unit * item.cantidad;
-                totalDescuento += item.descuento || 0;
-            });
-            
+
+            const detalles = detalleRows.map(row => ({
+                ...row,
+                cantidad: Number(row.cantidad),
+                precio_unit: Number(row.precio_unit),
+                descuento: Number(row.descuento || 0),
+                subtotal: Number(row.subtotal)
+            }));
+
             res.json({
-                venta: { ...venta, subtotal, total_descuento: totalDescuento },
-                detalles: detalleRows
+                venta: { ...venta, total: Number(venta.total) },
+                detalles
             });
         });
     });
 });
 
-// ============== RUTAS DE COMPRAS ==============
+// ============================================================
+// COMPRAS
+// ============================================================
+
 app.get('/api/compras', authenticateToken, (req, res) => {
     db.query(`
-        SELECT c.id, p.codigo, p.nombre, c.cantidad, c.precio_compra, c.proveedor, c.fecha, c.usuario 
+        SELECT c.id, p.codigo, p.nombre, c.cantidad, c.precio_compra, c.proveedor_id, c.fecha, c.usuario 
         FROM compras c 
         JOIN productos p ON c.producto_id = p.id 
         ORDER BY c.fecha DESC
@@ -463,18 +513,18 @@ app.get('/api/compras', authenticateToken, (req, res) => {
 app.post('/api/compras', authenticateToken, (req, res) => {
     const { producto_id, cantidad, precio_compra, proveedor_id } = req.body;
     const user = req.user.usuario;
-    
+
     if (!producto_id || cantidad <= 0 || !precio_compra) {
         return res.status(400).json({ error: 'Datos inválidos' });
     }
-    
+
     db.query("SELECT nombre FROM productos WHERE id = ?", [producto_id], (err, productRows) => {
         if (err || productRows.length === 0) {
             return res.status(400).json({ error: 'Producto no encontrado' });
         }
-        
+
         const productoNombre = productRows[0].nombre;
-        
+
         db.query(
             "INSERT INTO compras (producto_id, cantidad, precio_compra, proveedor_id, usuario) VALUES (?, ?, ?, ?, ?)",
             [producto_id, cantidad, precio_compra, proveedor_id, user],
@@ -483,7 +533,7 @@ app.post('/api/compras', authenticateToken, (req, res) => {
                     console.error(err);
                     return res.status(500).json({ error: 'Error al registrar compra' });
                 }
-                
+
                 db.query(
                     "UPDATE productos SET stock = stock + ? WHERE id = ?",
                     [cantidad, producto_id],
@@ -492,17 +542,13 @@ app.post('/api/compras', authenticateToken, (req, res) => {
                             console.error(err);
                             return res.status(500).json({ error: 'Error al actualizar stock' });
                         }
-                        
-                        // ✅ REGISTRAR MOVIMIENTO (AGREGAR ESTO)
-                       // Usar las observaciones/notas que escribió el usuario
-const observacionesVenta = notas && notas.trim() !== '' ? notas : `Venta ${folio}`;
 
-db.query(
-    "INSERT INTO movimientos (tipo, producto, cantidad, usuario, observaciones) VALUES (?, ?, ?, ?, ?)",
-    ['venta', item.nombre, cantidadNegativa, user, observacionesVenta],
-    (err) => { if (err) console.error('Error al registrar movimiento:', err); }
-);
-                        
+                        db.query(
+                            "INSERT INTO movimientos (tipo, producto, cantidad, usuario, observaciones) VALUES (?, ?, ?, ?, ?)",
+                            ['compra', productoNombre, cantidad, user, 'Compra registrada'],
+                            (err) => { if (err) console.error('Error al registrar movimiento:', err); }
+                        );
+
                         res.json({ success: true, message: 'Compra registrada' });
                     }
                 );
@@ -511,7 +557,10 @@ db.query(
     });
 });
 
-// ============== RUTAS DE DASHBOARD ==============
+// ============================================================
+// DASHBOARD
+// ============================================================
+
 app.get('/api/dashboard', authenticateToken, (req, res) => {
     const queries = {
         totalProductos: "SELECT COUNT(*) as count FROM productos",
@@ -531,11 +580,11 @@ app.get('/api/dashboard', authenticateToken, (req, res) => {
             LIMIT 5
         `
     };
-    
+
     const results = {};
     let completed = 0;
     const total = Object.keys(queries).length;
-    
+
     for (const [key, query] of Object.entries(queries)) {
         db.query(query, (err, rows) => {
             if (err) {
@@ -544,7 +593,7 @@ app.get('/api/dashboard', authenticateToken, (req, res) => {
             } else {
                 results[key] = key.includes('productos') ? rows : rows[0];
             }
-            
+
             completed++;
             if (completed === total) {
                 res.json({
@@ -567,12 +616,15 @@ app.get('/api/dashboard', authenticateToken, (req, res) => {
     }
 });
 
-// ============== RUTAS DE USUARIOS ==============
+// ============================================================
+// USUARIOS
+// ============================================================
+
 app.get('/api/usuarios', authenticateToken, (req, res) => {
     if (req.user.rol !== 'admin') {
         return res.status(403).json({ error: 'Acceso denegado' });
     }
-    
+
     db.query("SELECT id, nombre, usuario, rol, estado, created_at FROM usuarios ORDER BY id DESC", (err, results) => {
         if (err) {
             console.error(err);
@@ -586,13 +638,13 @@ app.post('/api/usuarios', authenticateToken, async (req, res) => {
     if (req.user.rol !== 'admin') {
         return res.status(403).json({ error: 'Acceso denegado' });
     }
-    
+
     const { nombre, usuario, password, rol, estado } = req.body;
-    
+
     if (!nombre || !usuario) {
         return res.status(400).json({ error: 'Nombre y usuario son requeridos' });
     }
-    
+
     db.query("SELECT id FROM usuarios WHERE usuario = ?", [usuario], async (err, results) => {
         if (err) {
             return res.status(500).json({ error: 'Error del servidor' });
@@ -600,9 +652,9 @@ app.post('/api/usuarios', authenticateToken, async (req, res) => {
         if (results.length > 0) {
             return res.status(400).json({ error: 'El nombre de usuario ya existe' });
         }
-        
+
         const hashedPassword = await bcrypt.hash(password || '123456', 10);
-        
+
         db.query(
             "INSERT INTO usuarios (nombre, usuario, password, rol, estado) VALUES (?, ?, ?, ?, ?)",
             [nombre, usuario, hashedPassword, rol || 'empleado', estado || 'activo'],
@@ -616,57 +668,12 @@ app.post('/api/usuarios', authenticateToken, async (req, res) => {
         );
     });
 });
-// ============== TICKET ==============
-app.get('/api/ventas/:id/ticket', authenticateToken, (req, res) => {
-    const id = req.params.id;
-    console.log('GET /api/ventas/' + id + '/ticket');
-    
-    db.query("SELECT * FROM ventas WHERE id = ?", [id], (err, ventaRows) => {
-        if (err) {
-            console.error('Error en venta:', err);
-            return res.status(500).json({ error: 'Error al cargar venta' });
-        }
-        
-        if (ventaRows.length === 0) {
-            return res.status(404).json({ error: 'Venta no encontrada' });
-        }
-        
-        const venta = ventaRows[0];
-        
-        db.query(`
-            SELECT vd.*, p.nombre, p.codigo 
-            FROM ventas_detalle vd 
-            LEFT JOIN productos p ON vd.producto_id = p.id 
-            WHERE vd.venta_id = ?
-        `, [id], (err, detalleRows) => {
-            if (err) {
-                console.error('Error en detalles:', err);
-                return res.status(500).json({ error: 'Error al cargar detalles' });
-            }
-            
-            // Convertir valores a números
-            const detalles = detalleRows.map(row => ({
-                ...row,
-                cantidad: Number(row.cantidad),
-                precio_unit: Number(row.precio_unit),
-                descuento: Number(row.descuento || 0),
-                subtotal: Number(row.subtotal)
-            }));
-            
-            res.json({
-                venta: {
-                    ...venta,
-                    total: Number(venta.total)
-                },
-                detalles: detalles
-            });
-        });
-    });
-});
-// ============== INVENTARIO ==============
+
+// ============================================================
+// INVENTARIO
+// ============================================================
+
 app.get('/api/inventario/stock', authenticateToken, (req, res) => {
-    console.log('Solicitud GET /api/inventario/stock');
-    
     const query = `
         SELECT codigo, nombre, stock, stock_min, categoria,
                CASE WHEN stock = 0 THEN 'agotado'
@@ -683,329 +690,418 @@ app.get('/api/inventario/stock', authenticateToken, (req, res) => {
             END,
             nombre ASC
     `;
-    
+
     db.query(query, (err, results) => {
         if (err) {
             console.error('Error en stock:', err);
             return res.status(500).json({ error: 'Error al cargar stock: ' + err.message });
         }
-        console.log(`Stock cargado: ${results.length} productos`);
         res.json(results || []);
     });
 });
 
 app.get('/api/inventario/movimientos', authenticateToken, (req, res) => {
-    console.log('Solicitud GET /api/inventario/movimientos', req.query);
-    
     const { tipo, producto, desde, hasta } = req.query;
-    
+
     let query = "SELECT id, tipo, producto, cantidad, usuario, fecha, observaciones FROM movimientos WHERE 1=1";
     const params = [];
-    
-    if (tipo && tipo !== '') {
-        query += " AND tipo = ?";
-        params.push(tipo);
-    }
-    
-    if (producto && producto !== '') {
-        query += " AND producto LIKE ?";
-        params.push(`%${producto}%`);
-    }
-    
-    if (desde && desde !== '') {
-        query += " AND DATE(fecha) >= ?";
-        params.push(desde);
-    }
-    
-    if (hasta && hasta !== '') {
-        query += " AND DATE(fecha) <= ?";
-        params.push(hasta);
-    }
-    
+
+    if (tipo && tipo !== '') { query += " AND tipo = ?"; params.push(tipo); }
+    if (producto && producto !== '') { query += " AND producto LIKE ?"; params.push(`%${producto}%`); }
+    if (desde && desde !== '') { query += " AND DATE(fecha) >= ?"; params.push(desde); }
+    if (hasta && hasta !== '') { query += " AND DATE(fecha) <= ?"; params.push(hasta); }
+
     query += " ORDER BY fecha DESC LIMIT 200";
-    
-    console.log('Query:', query);
-    console.log('Params:', params);
-    
+
     db.query(query, params, (err, results) => {
         if (err) {
             console.error('Error en movimientos:', err);
             return res.status(500).json({ error: 'Error al cargar movimientos: ' + err.message });
         }
-        console.log(`Movimientos cargados: ${results.length}`);
         res.json(results || []);
     });
 });
-// ============== INICIAR SERVIDOR ==============
+
+// ============================================================
+// REPORTES — INVENTARIO
+// ============================================================
+
+app.get('/api/reportes/inventario', authenticateToken, (req, res) => {
+    const { formato } = req.query;
+
+    const query = `
+        SELECT p.codigo, p.nombre, p.categoria, 
+               IFNULL(prov.nombre, '') as proveedor,
+               p.stock, p.stock_min as minimo,
+               CASE WHEN p.stock <= p.stock_min THEN 'BAJO' ELSE 'NORMAL' END as estado
+        FROM productos p
+        LEFT JOIN proveedores prov ON p.proveedor_id = prov.id
+        ORDER BY p.nombre
+    `;
+
+    db.query(query, (err, results) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ error: 'Error al generar reporte' });
+        }
+
+        if (formato === 'csv') {
+            let csv = '\uFEFF';
+            csv += 'Código,Nombre,Categoría,Proveedor,Stock,Mínimo,Estado\n';
+            results.forEach(row => {
+                csv += `"${row.codigo}","${row.nombre}","${row.categoria || ''}","${row.proveedor}",${row.stock},${row.minimo},"${row.estado}"\n`;
+            });
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="reporte_inventario_${Date.now()}.csv"`);
+            return res.send(csv);
+        }
+
+        if (formato === 'pdf') {
+            const doc = new PDFDocument({ margin: 40, size: 'A4' });
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="reporte_inventario_${Date.now()}.pdf"`);
+            doc.pipe(res);
+
+            pdfHeader(doc, 'Reporte de Inventario');
+
+            const cols = [
+                { label: 'Código',    key: 'codigo',    x: 40,  width: 65 },
+                { label: 'Nombre',    key: 'nombre',    x: 110, width: 140 },
+                { label: 'Categoría', key: 'categoria', x: 255, width: 90 },
+                { label: 'Proveedor', key: 'proveedor', x: 350, width: 85 },
+                { label: 'Stock',     key: 'stock',     x: 440, width: 35, align: 'right' },
+                { label: 'Mín',       key: 'minimo',    x: 480, width: 30, align: 'right' },
+                { label: 'Estado',    key: 'estado',    x: 515, width: 40 },
+            ];
+
+            pdfTableHeader(doc, cols);
+            results.forEach((row, i) => pdfTableRow(doc, cols, row, i));
+            pdfFooter(doc, results.length);
+
+            doc.end();
+            return;
+        }
+
+        res.json(results);
+    });
+});
+
+// ============================================================
+// REPORTES — VENTAS
+// ============================================================
+
+app.get('/api/reportes/ventas', authenticateToken, (req, res) => {
+    const { formato } = req.query;
+
+    const query = `
+        SELECT v.fecha, v.folio, 
+               GROUP_CONCAT(p.nombre SEPARATOR ', ') as productos,
+               v.total, 
+               COALESCE(v.metodo_pago, 'No especificado') as tipo_pago,
+               COALESCE(v.notas, '') as observaciones,
+               v.usuario
+        FROM ventas v
+        JOIN ventas_detalle vd ON v.id = vd.venta_id
+        JOIN productos p ON vd.producto_id = p.id
+        GROUP BY v.id
+        ORDER BY v.fecha DESC
+    `;
+
+    db.query(query, (err, results) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ error: 'Error al generar reporte' });
+        }
+
+        if (formato === 'csv') {
+            let csv = '\uFEFF';
+            csv += 'Fecha,Folio,Productos,Total,Tipo Pago,Observaciones,Usuario\n';
+            results.forEach(row => {
+                csv += `"${row.fecha}","${row.folio}","${row.productos}",${row.total},"${row.tipo_pago}","${row.observaciones}","${row.usuario}"\n`;
+            });
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="reporte_ventas_${Date.now()}.csv"`);
+            return res.send(csv);
+        }
+
+        if (formato === 'pdf') {
+            const doc = new PDFDocument({ margin: 40, size: 'A4', layout: 'landscape' });
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="reporte_ventas_${Date.now()}.pdf"`);
+            doc.pipe(res);
+
+            pdfHeader(doc, 'Reporte de Ventas');
+
+            const cols = [
+                { label: 'Fecha',        key: 'fecha',         x: 40,  width: 100 },
+                { label: 'Folio',        key: 'folio',         x: 145, width: 55 },
+                { label: 'Productos',    key: 'productos',     x: 205, width: 250 },
+                { label: 'Total',        key: 'total',         x: 460, width: 60, align: 'right' },
+                { label: 'Pago',         key: 'tipo_pago',     x: 525, width: 70 },
+                { label: 'Usuario',      key: 'usuario',       x: 600, width: 65 },
+            ];
+
+            pdfTableHeader(doc, cols);
+            results.forEach((row, i) => {
+                const displayRow = {
+                    ...row,
+                    fecha: row.fecha ? new Date(row.fecha).toLocaleDateString('es-MX') : '',
+                    total: `$${Number(row.total).toFixed(2)}`,
+                    productos: row.productos ? row.productos.substring(0, 60) + (row.productos.length > 60 ? '...' : '') : ''
+                };
+                pdfTableRow(doc, cols, displayRow, i);
+            });
+
+            // Total general
+            const totalGeneral = results.reduce((sum, r) => sum + Number(r.total || 0), 0);
+            doc.moveDown(0.3);
+            doc.font('Helvetica-Bold').fontSize(9)
+               .text(`Total general: $${totalGeneral.toFixed(2)}`, 40, doc.y, { align: 'right', width: 625 });
+
+            pdfFooter(doc, results.length);
+            doc.end();
+            return;
+        }
+
+        res.json(results);
+    });
+});
+
+// ============================================================
+// REPORTES — MOVIMIENTOS
+// ============================================================
+
+app.get('/api/reportes/movimientos', authenticateToken, (req, res) => {
+    const { formato } = req.query;
+
+    const query = `
+        SELECT fecha, tipo, producto, cantidad, usuario, 
+               IFNULL(observaciones, '') as observaciones
+        FROM movimientos 
+        ORDER BY fecha DESC
+    `;
+
+    db.query(query, (err, results) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ error: 'Error al generar reporte' });
+        }
+
+        if (formato === 'csv') {
+            let csv = '\uFEFF';
+            csv += 'Fecha,Tipo,Producto,Cantidad,Usuario,Observaciones\n';
+            results.forEach(row => {
+                csv += `"${row.fecha}","${row.tipo}","${row.producto}",${row.cantidad},"${row.usuario}","${row.observaciones}"\n`;
+            });
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="reporte_movimientos_${Date.now()}.csv"`);
+            return res.send(csv);
+        }
+
+        if (formato === 'pdf') {
+            const doc = new PDFDocument({ margin: 40, size: 'A4' });
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="reporte_movimientos_${Date.now()}.pdf"`);
+            doc.pipe(res);
+
+            pdfHeader(doc, 'Reporte de Movimientos');
+
+            const cols = [
+                { label: 'Fecha',          key: 'fecha',         x: 40,  width: 100 },
+                { label: 'Tipo',           key: 'tipo',          x: 145, width: 55 },
+                { label: 'Producto',       key: 'producto',      x: 205, width: 160 },
+                { label: 'Cantidad',       key: 'cantidad',      x: 370, width: 55, align: 'right' },
+                { label: 'Usuario',        key: 'usuario',       x: 430, width: 70 },
+                { label: 'Observaciones',  key: 'observaciones', x: 505, width: 90 },
+            ];
+
+            pdfTableHeader(doc, cols);
+            results.forEach((row, i) => {
+                const displayRow = {
+                    ...row,
+                    fecha: row.fecha ? new Date(row.fecha).toLocaleDateString('es-MX') : '',
+                };
+                pdfTableRow(doc, cols, displayRow, i);
+            });
+            pdfFooter(doc, results.length);
+
+            doc.end();
+            return;
+        }
+
+        res.json(results);
+    });
+});
+
+// ============================================================
+// REPORTES — COMPRAS
+// ============================================================
+
+app.get('/api/reportes/compras', authenticateToken, (req, res) => {
+    const { formato, proveedor_id, desde, hasta } = req.query;
+
+    let query = `
+        SELECT c.id, p.codigo, p.nombre as producto, 
+               c.cantidad, c.precio_compra,
+               (c.cantidad * c.precio_compra) as total,
+               prov.nombre as proveedor,
+               c.fecha, c.usuario
+        FROM compras c
+        JOIN productos p ON c.producto_id = p.id
+        LEFT JOIN proveedores prov ON c.proveedor_id = prov.id
+    `;
+
+    const params = [];
+    const conditions = [];
+
+    if (proveedor_id && proveedor_id !== '') { conditions.push("c.proveedor_id = ?"); params.push(proveedor_id); }
+    if (desde && desde !== '') { conditions.push("DATE(c.fecha) >= ?"); params.push(desde); }
+    if (hasta && hasta !== '') { conditions.push("DATE(c.fecha) <= ?"); params.push(hasta); }
+
+    if (conditions.length > 0) query += " WHERE " + conditions.join(" AND ");
+    query += " ORDER BY c.fecha DESC";
+
+    db.query(query, params, (err, results) => {
+        if (err) {
+            console.error('Error en reporte de compras:', err);
+            return res.status(500).json({ error: 'Error al generar reporte' });
+        }
+
+        if (formato === 'csv') {
+            let csv = '\uFEFF';
+            csv += 'ID,Código,Producto,Cantidad,Precio Unitario,Total,Proveedor,Fecha,Usuario\n';
+            results.forEach(row => {
+                csv += `"${row.id}","${row.codigo}","${row.producto}",${row.cantidad},${row.precio_compra},${row.total},"${row.proveedor || 'N/A'}","${row.fecha}","${row.usuario}"\n`;
+            });
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="reporte_compras_${Date.now()}.csv"`);
+            return res.send(csv);
+        }
+
+        if (formato === 'pdf') {
+            const doc = new PDFDocument({ margin: 40, size: 'A4', layout: 'landscape' });
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="reporte_compras_${Date.now()}.pdf"`);
+            doc.pipe(res);
+
+            pdfHeader(doc, 'Reporte de Compras');
+
+            const cols = [
+                { label: 'ID',         key: 'id',           x: 40,  width: 30, align: 'right' },
+                { label: 'Código',     key: 'codigo',       x: 75,  width: 60 },
+                { label: 'Producto',   key: 'producto',     x: 140, width: 160 },
+                { label: 'Cantidad',   key: 'cantidad',     x: 305, width: 55, align: 'right' },
+                { label: 'P. Unit.',   key: 'precio_compra',x: 365, width: 65, align: 'right' },
+                { label: 'Total',      key: 'total',        x: 435, width: 65, align: 'right' },
+                { label: 'Proveedor',  key: 'proveedor',    x: 505, width: 90 },
+                { label: 'Fecha',      key: 'fecha',        x: 600, width: 65 },
+            ];
+
+            pdfTableHeader(doc, cols);
+            results.forEach((row, i) => {
+                const displayRow = {
+                    ...row,
+                    fecha: row.fecha ? new Date(row.fecha).toLocaleDateString('es-MX') : '',
+                    precio_compra: `$${Number(row.precio_compra).toFixed(2)}`,
+                    total: `$${Number(row.total).toFixed(2)}`,
+                    proveedor: row.proveedor || 'N/A'
+                };
+                pdfTableRow(doc, cols, displayRow, i);
+            });
+
+            const totalGeneral = results.reduce((sum, r) => sum + Number(r.total || 0), 0);
+            doc.moveDown(0.3);
+            doc.font('Helvetica-Bold').fontSize(9)
+               .text(`Total general: $${totalGeneral.toFixed(2)}`, 40, doc.y, { align: 'right', width: 625 });
+
+            pdfFooter(doc, results.length);
+            doc.end();
+            return;
+        }
+
+        res.json(results);
+    });
+});
+
+// ============================================================
+// REPORTES — USUARIOS
+// ============================================================
+
+app.get('/api/reportes/usuarios', authenticateToken, (req, res) => {
+    const { formato } = req.query;
+
+    const query = `
+        SELECT usuario, nombre, rol, estado
+        FROM usuarios 
+        ORDER BY nombre
+    `;
+
+    db.query(query, (err, results) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ error: 'Error al generar reporte' });
+        }
+
+        if (formato === 'csv') {
+            let csv = '\uFEFF';
+            csv += 'Usuario,Nombre,Rol,Estado\n';
+            results.forEach(row => {
+                csv += `"${row.usuario}","${row.nombre}","${row.rol}","${row.estado}"\n`;
+            });
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="reporte_usuarios_${Date.now()}.csv"`);
+            return res.send(csv);
+        }
+
+        if (formato === 'pdf') {
+            const doc = new PDFDocument({ margin: 40, size: 'A4' });
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="reporte_usuarios_${Date.now()}.pdf"`);
+            doc.pipe(res);
+
+            pdfHeader(doc, 'Reporte de Usuarios');
+
+            const cols = [
+                { label: 'Usuario', key: 'usuario', x: 40,  width: 120 },
+                { label: 'Nombre',  key: 'nombre',  x: 165, width: 200 },
+                { label: 'Rol',     key: 'rol',     x: 370, width: 90 },
+                { label: 'Estado',  key: 'estado',  x: 465, width: 90 },
+            ];
+
+            pdfTableHeader(doc, cols);
+            results.forEach((row, i) => pdfTableRow(doc, cols, row, i));
+            pdfFooter(doc, results.length);
+
+            doc.end();
+            return;
+        }
+
+        res.json(results);
+    });
+});
+
+// ============================================================
+// INICIAR SERVIDOR
+// ============================================================
+
 app.listen(PORT, () => {
     console.log(`\n🚀 Servidor corriendo en http://localhost:${PORT}`);
     console.log('📋 Endpoints disponibles:');
     console.log('   POST /api/auth/login');
     console.log('   GET  /api/productos');
+    console.log('   POST /api/productos');
+    console.log('   PUT  /api/productos/:id');
+    console.log('   DELETE /api/productos/:id');
     console.log('   GET  /api/ventas/recientes');
     console.log('   POST /api/ventas');
     console.log('   GET  /api/compras');
     console.log('   POST /api/compras');
+    console.log('   GET  /api/reportes/inventario?formato=pdf|csv');
+    console.log('   GET  /api/reportes/ventas?formato=pdf|csv');
+    console.log('   GET  /api/reportes/movimientos?formato=pdf|csv');
+    console.log('   GET  /api/reportes/compras?formato=pdf|csv');
+    console.log('   GET  /api/reportes/usuarios?formato=pdf|csv');
     console.log('\n🔐 Credenciales de prueba:');
     console.log('   Usuario: admin');
     console.log('   Contraseña: Admin123!\n');
-});
-// ============== REPORTES ==============
-app.get('/api/reportes/inventario', authenticateToken, (req, res) => {
-  const { formato } = req.query;
-  
-  const query = `
-    SELECT codigo, nombre, categoria, 
-           IFNULL(proveedor, '') as proveedor, 
-           stock, stock_min as minimo,
-           CASE WHEN stock <= stock_min THEN 'BAJO' ELSE 'NORMAL' END as estado
-    FROM productos 
-    ORDER BY nombre
-  `;
-  
-  db.query(query, (err, results) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'Error al generar reporte' });
-    }
-    
-    if (formato === 'csv') {
-      let csv = '\uFEFF';
-      csv += 'Código,Nombre,Categoría,Proveedor,Stock,Mínimo,Estado\n';
-      results.forEach(row => {
-        csv += `"${row.codigo}","${row.nombre}","${row.categoria || ''}","${row.proveedor}",${row.stock},${row.minimo},"${row.estado}"\n`;
-      });
-      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename="reporte_inventario_${Date.now()}.csv"`);
-      return res.send(csv);
-    }
-    
-    res.json(results);
-  });
-});
-
-app.get('/api/reportes/ventas', authenticateToken, (req, res) => {
-  const { formato } = req.query;
-  
-  const query = `
-    SELECT v.fecha, v.folio, 
-           GROUP_CONCAT(p.nombre SEPARATOR ', ') as productos,
-           v.total, 
-           COALESCE(v.metodo_pago, 'No especificado') as tipo_pago,
-           COALESCE(v.notas, '') as observaciones,
-           v.usuario
-    FROM ventas v
-    JOIN ventas_detalle vd ON v.id = vd.venta_id
-    JOIN productos p ON vd.producto_id = p.id
-    GROUP BY v.id
-    ORDER BY v.fecha DESC
-  `;
-  
-  db.query(query, (err, results) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'Error al generar reporte' });
-    }
-    
-    if (formato === 'csv') {
-      let csv = '\uFEFF';
-      csv += 'Fecha,Folio,Productos,Total,Tipo Pago,Observaciones,Usuario\n';
-      results.forEach(row => {
-        csv += `"${row.fecha}","${row.folio}","${row.productos}",${row.total},"${row.tipo_pago}","${row.observaciones}","${row.usuario}"\n`;
-      });
-      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename="reporte_ventas_${Date.now()}.csv"`);
-      return res.send(csv);
-    }
-    
-    res.json(results);
-  });
-});
-
-app.get('/api/reportes/movimientos', authenticateToken, (req, res) => {
-  const { formato } = req.query;
-  
-  const query = `
-    SELECT fecha, tipo, producto, cantidad, usuario, 
-           IFNULL(observaciones, '') as observaciones
-    FROM movimientos 
-    ORDER BY fecha DESC
-  `;
-  
-  db.query(query, (err, results) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'Error al generar reporte' });
-    }
-    
-    if (formato === 'csv') {
-      let csv = '\uFEFF';
-      csv += 'Fecha,Tipo,Producto,Cantidad,Usuario,Observaciones\n';
-      results.forEach(row => {
-        csv += `"${row.fecha}","${row.tipo}","${row.producto}",${row.cantidad},"${row.usuario}","${row.observaciones}"\n`;
-      });
-      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename="reporte_movimientos_${Date.now()}.csv"`);
-      return res.send(csv);
-    }
-    
-    res.json(results);
-  });
-});
-
-app.get('/api/reportes/usuarios', authenticateToken, (req, res) => {
-  const { formato } = req.query;
-  
-  const query = `
-    SELECT usuario, nombre, rol, estado
-    FROM usuarios 
-    ORDER BY nombre
-  `;
-  
-  db.query(query, (err, results) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'Error al generar reporte' });
-    }
-    
-    if (formato === 'csv') {
-      let csv = '\uFEFF';
-      csv += 'Usuario,Nombre,Rol,Estado\n';
-      results.forEach(row => {
-        csv += `"${row.usuario}","${row.nombre}","${row.rol}","${row.estado}"\n`;
-      });
-      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename="reporte_usuarios_${Date.now()}.csv"`);
-      return res.send(csv);
-    }
-    
-    res.json(results);
-  });
-});
-// ============== INVENTARIO ==============
-app.get('/api/inventario/stock', authenticateToken, (req, res) => {
-    const query = `
-        SELECT codigo, nombre, stock, stock_min, categoria,
-               CASE WHEN stock = 0 THEN 'agotado'
-                    WHEN stock <= stock_min THEN 'bajo'
-                    ELSE 'ok'
-               END as estado_stock
-        FROM productos
-        WHERE estado = 'activo'
-        ORDER BY 
-            CASE 
-                WHEN stock = 0 THEN 1
-                WHEN stock <= stock_min THEN 2
-                ELSE 3
-            END,
-            nombre ASC
-    `;
-    
-    db.query(query, (err, results) => {
-        if (err) {
-            console.error('Error en stock:', err);
-            return res.status(500).json({ error: 'Error al cargar stock' });
-        }
-        res.json(results || []);
-    });
-});
-
-// ============== CREAR PRODUCTO ==============
-app.post('/api/productos', authenticateToken, (req, res) => {
-    const { codigo, nombre, categoria, proveedor, precio_compra, precio_venta, stock, stock_min, estado } = req.body;
-
-    if (!codigo || !nombre || !categoria) {
-        return res.status(400).json({ error: 'Código, nombre y categoría son requeridos' });
-    }
-
-    db.query("SELECT id FROM productos WHERE codigo = ?", [codigo], (err, results) => {
-        if (err) return res.status(500).json({ error: 'Error del servidor' });
-        if (results.length > 0) return res.status(400).json({ error: 'El código de producto ya existe' });
-
-        db.query(
-            "INSERT INTO productos (codigo, nombre, categoria, proveedor, precio_compra, precio_venta, stock, stock_min, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            [codigo, nombre, categoria, proveedor || '', precio_compra || 0, precio_venta || 0, stock || 0, stock_min || 0, estado || 'activo'],
-            (err, result) => {
-                if (err) {
-                    console.error(err);
-                    return res.status(500).json({ error: 'Error al crear producto' });
-                }
-                res.json({ success: true, id: result.insertId, message: 'Producto creado' });
-            }
-        );
-    });
-});
-
-// ============== EDITAR PRODUCTO ==============
-app.put('/api/productos/:id', authenticateToken, (req, res) => {
-    const { id } = req.params;
-    const { nombre, categoria, proveedor, precio_compra, precio_venta, stock, stock_min, estado } = req.body;
-
-    if (!nombre || !categoria) {
-        return res.status(400).json({ error: 'Nombre y categoría son requeridos' });
-    }
-
-    db.query(
-        "UPDATE productos SET nombre=?, categoria=?, proveedor=?, precio_compra=?, precio_venta=?, stock=?, stock_min=?, estado=? WHERE id=?",
-        [nombre, categoria, proveedor || '', precio_compra || 0, precio_venta || 0, stock || 0, stock_min || 0, estado || 'activo', id],
-        (err, result) => {
-            if (err) {
-                console.error(err);
-                return res.status(500).json({ error: 'Error al actualizar producto' });
-            }
-            if (result.affectedRows === 0) return res.status(404).json({ error: 'Producto no encontrado' });
-            res.json({ success: true, message: 'Producto actualizado' });
-        }
-    );
-});
-
-// ============== ELIMINAR PRODUCTO ==============
-app.delete('/api/productos/:id', authenticateToken, (req, res) => {
-    const { id } = req.params;
-
-    db.query("DELETE FROM productos WHERE id = ?", [id], (err, result) => {
-        if (err) {
-            console.error(err);
-            return res.status(500).json({ error: 'Error al eliminar producto' });
-        }
-        if (result.affectedRows === 0) return res.status(404).json({ error: 'Producto no encontrado' });
-        res.json({ success: true, message: 'Producto eliminado' });
-    });
-});
-
-app.get('/api/inventario/movimientos', authenticateToken, (req, res) => {
-    const { tipo, producto, desde, hasta } = req.query;
-    
-    let query = "SELECT id, tipo, producto, cantidad, usuario, fecha, observaciones FROM movimientos WHERE 1=1";
-    const params = [];
-    
-    if (tipo && tipo !== '') {
-        query += " AND tipo = ?";
-        params.push(tipo);
-    }
-    
-    if (producto && producto !== '') {
-        query += " AND producto LIKE ?";
-        params.push(`%${producto}%`);
-    }
-    
-    if (desde && desde !== '') {
-        query += " AND DATE(fecha) >= ?";
-        params.push(desde);
-    }
-    
-    if (hasta && hasta !== '') {
-        query += " AND DATE(fecha) <= ?";
-        params.push(hasta);
-    }
-    
-    query += " ORDER BY fecha DESC LIMIT 200";
-    
-    db.query(query, params, (err, results) => {
-        if (err) {
-            console.error('Error en movimientos:', err);
-            return res.status(500).json({ error: 'Error al cargar movimientos' });
-        }
-        res.json(results || []);
-    });
 });
