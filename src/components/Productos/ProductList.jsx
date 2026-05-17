@@ -13,6 +13,20 @@ export default function ProductList({ productos, onEdit, onDelete }) {
     return 'Disponible';
   };
 
+  const handleEdit = (producto) => {
+    // Ejecutar la función onEdit para cargar los datos
+    onEdit(producto);
+    
+    // Desplazar la página al formulario
+    const formElement = document.querySelector('.modern-form-card');
+    if (formElement) {
+      formElement.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'start' 
+      });
+    }
+  };
+
   if (productos.length === 0) {
     return (
       <div className="modern-table-card">
@@ -79,7 +93,7 @@ export default function ProductList({ productos, onEdit, onDelete }) {
                 </td>
                 <td>
                   <div className="action-buttons">
-                    <button onClick={() => onEdit(producto)} className="btn-action edit" title="Editar">
+                    <button onClick={() => handleEdit(producto)} className="btn-action edit" title="Editar">
                       ✏️
                     </button>
                     <button onClick={() => onDelete(producto.id)} className="btn-action delete" title="Eliminar">
