@@ -15,7 +15,6 @@ export default function CompraForm({ productos, onRegistrar }) {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
-  // Cargar proveedores desde la API
   const fetchProveedores = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -32,22 +31,18 @@ export default function CompraForm({ productos, onRegistrar }) {
     fetchProveedores();
   }, []);
 
-  // Producto seleccionado
   const productoSeleccionado = productos.find(p => p.id === parseInt(formData.producto_id));
 
-  // Cuando cambia el producto, auto-cargar precio de compra Y proveedor
   useEffect(() => {
     if (productoSeleccionado) {
-      console.log('Producto seleccionado:', productoSeleccionado); // Para depuración
       setFormData(prev => ({
         ...prev,
         precio_compra: productoSeleccionado.precio_compra || 0,
-        proveedor_id: productoSeleccionado.proveedor_id || ''   // ← Arrastra el proveedor
+        proveedor_id: productoSeleccionado.proveedor_id || ''
       }));
     }
   }, [formData.producto_id, productoSeleccionado]);
 
-  // Guardar nuevo proveedor
   const handleNewProveedor = async () => {
     if (!newProveedor.trim()) {
       alert('Ingrese el nombre del proveedor');
@@ -109,7 +104,6 @@ export default function CompraForm({ productos, onRegistrar }) {
     }
   };
 
-  // Obtener el nombre del proveedor seleccionado
   const proveedorSeleccionado = proveedores.find(p => p.id === parseInt(formData.proveedor_id));
 
   return (
@@ -119,108 +113,115 @@ export default function CompraForm({ productos, onRegistrar }) {
       </div>
 
       <form onSubmit={handleSubmit} className="modern-form-body">
+        {/* Producto */}
         <div className="modern-form-group">
-          <label>Producto *</label>
-          <select
-            value={formData.producto_id}
-            onChange={(e) => setFormData({ ...formData, producto_id: e.target.value })}
-            className={errors.producto_id ? 'error' : ''}
-          >
-            <option value="">Seleccione un producto</option>
-            {productos.map((producto) => (
-              <option key={producto.id} value={producto.id}>
-                {producto.codigo} - {producto.nombre} (Stock: {producto.stock})
-              </option>
-            ))}
-          </select>
+          <label>PRODUCTO *</label>
+          <div className="modern-input-wrapper">
+            <span className="input-icon">🔖</span>
+            <select
+              value={formData.producto_id}
+              onChange={(e) => setFormData({ ...formData, producto_id: e.target.value })}
+              className={errors.producto_id ? 'error' : ''}
+            >
+              <option value="">Seleccione un producto</option>
+              {productos.map((producto) => (
+                <option key={producto.id} value={producto.id}>
+                  {producto.codigo} - {producto.nombre} (Stock: {producto.stock})
+                </option>
+              ))}
+            </select>
+          </div>
           {errors.producto_id && <span className="error-message">{errors.producto_id}</span>}
         </div>
 
         <div className="modern-form-row">
+          {/* Cantidad */}
           <div className="modern-form-group">
-            <label>Cantidad *</label>
-            <input
-              type="number"
-              min="1"
-              value={formData.cantidad}
-              onChange={(e) => setFormData({ ...formData, cantidad: parseInt(e.target.value) || 1 })}
-              className={errors.cantidad ? 'error' : ''}
-            />
+            <label>CANTIDAD *</label>
+            <div className="modern-input-wrapper">
+              <span className="input-icon">#</span>
+              <input
+                type="number"
+                min="1"
+                value={formData.cantidad}
+                onChange={(e) => setFormData({ ...formData, cantidad: parseInt(e.target.value) || 1 })}
+                className={errors.cantidad ? 'error' : ''}
+              />
+            </div>
             {errors.cantidad && <span className="error-message">{errors.cantidad}</span>}
           </div>
 
+          {/* Precio Compra */}
           <div className="modern-form-group">
-            <label>Precio Compra Unitario *</label>
-            <input
-              type="number"
-              step="0.01"
-              value={formData.precio_compra}
-              readOnly
-              style={{ backgroundColor: '#f0f0f0', cursor: 'not-allowed' }}
-              className={errors.precio_compra ? 'error' : ''}
-            />
-            <small style={{ color: '#666', fontSize: '11px' }}>
+            <label>PRECIO COMPRA UNITARIO *</label>
+            <div className="modern-input-wrapper">
+              <span className="input-icon">$</span>
+              <input
+                type="number"
+                step="0.01"
+                value={formData.precio_compra}
+                readOnly
+                style={{ backgroundColor: '#f0f0f0', cursor: 'not-allowed' }}
+                className={errors.precio_compra ? 'error' : ''}
+              />
+            </div>
+            <small style={{ color: '#666', fontSize: '11px', marginTop: '4px', display: 'block' }}>
               Se carga automáticamente desde el producto
             </small>
             {errors.precio_compra && <span className="error-message">{errors.precio_compra}</span>}
           </div>
         </div>
 
-        {/* Campo Proveedor */}
+        {/* Proveedor */}
         <div className="modern-form-group">
-          <label>Proveedor *</label>
-          {!showNewProveedor ? (
-            <select
-              value={formData.proveedor_id}
-              onChange={(e) => {
-                if (e.target.value === '__nuevo__') {
-                  setShowNewProveedor(true);
-                  setFormData({ ...formData, proveedor_id: '' });
-                } else {
-                  setFormData({ ...formData, proveedor_id: e.target.value });
-                }
-              }}
-              className={errors.proveedor_id ? 'error' : ''}
-            >
-              <option value="">-- Seleccione un proveedor --</option>
-              {proveedores.map((prov) => (
-                <option key={prov.id} value={prov.id}>
-                  {prov.nombre}
-                </option>
-              ))}
-              <option value="__nuevo__" style={{ color: '#2e7d32', fontWeight: 'bold' }}>
-                + Agregar nuevo proveedor
-              </option>
-            </select>
-          ) : (
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <input
-                type="text"
-                value={newProveedor}
-                onChange={(e) => setNewProveedor(e.target.value)}
-                placeholder="Nombre del nuevo proveedor"
-                autoFocus
-                style={{ flex: 1 }}
-              />
-              <button type="button" onClick={handleNewProveedor} style={{ background: '#4caf50', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer' }}>
-                Guardar
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowNewProveedor(false);
-                  setNewProveedor('');
+          <label>PROVEEDOR *</label>
+          <div className="modern-input-wrapper">
+            <span className="input-icon">🏭</span>
+            {!showNewProveedor ? (
+              <select
+                value={formData.proveedor_id}
+                onChange={(e) => {
+                  if (e.target.value === '__nuevo__') {
+                    setShowNewProveedor(true);
+                    setFormData({ ...formData, proveedor_id: '' });
+                  } else {
+                    setFormData({ ...formData, proveedor_id: e.target.value });
+                  }
                 }}
-                style={{ background: '#ccc', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer' }}
+                className={errors.proveedor_id ? 'error' : ''}
               >
-                Cancelar
-              </button>
-            </div>
-          )}
+                <option value="">-- Seleccione un proveedor --</option>
+                {proveedores.map((prov) => (
+                  <option key={prov.id} value={prov.id}>
+                    {prov.nombre}
+                  </option>
+                ))}
+                <option value="__nuevo__" style={{ color: '#2e7d32', fontWeight: 'bold' }}>
+                  + Agregar nuevo proveedor
+                </option>
+              </select>
+            ) : (
+              <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
+                <input
+                  type="text"
+                  value={newProveedor}
+                  onChange={(e) => setNewProveedor(e.target.value)}
+                  placeholder="Nombre del nuevo proveedor"
+                  autoFocus
+                  style={{ flex: 1 }}
+                />
+                <button type="button" onClick={handleNewProveedor} className="confirm-btn">
+                  Guardar
+                </button>
+                <button type="button" onClick={() => { setShowNewProveedor(false); setNewProveedor(''); }} className="cancel-btn">
+                  Cancelar
+                </button>
+              </div>
+            )}
+          </div>
           
-          {/* Mensaje cuando el proveedor se carga automáticamente */}
           {formData.proveedor_id && proveedorSeleccionado && !showNewProveedor && (
-            <small style={{ color: '#2e7d32', fontSize: '11px', display: 'block', marginTop: '4px' }}>
+            <small style={{ color: '#2e7d32', fontSize: '11px', display: 'block', marginTop: '8px', background: '#d4edda', padding: '6px 10px', borderRadius: '6px' }}>
               ✓ Proveedor cargado automáticamente: {proveedorSeleccionado.nombre}
             </small>
           )}
@@ -228,7 +229,7 @@ export default function CompraForm({ productos, onRegistrar }) {
           {errors.proveedor_id && <span className="error-message">{errors.proveedor_id}</span>}
         </div>
 
-        {/* Panel de información de stock */}
+        {/* Panel de stock */}
         {productoSeleccionado && (
           <div className="info-panel">
             <div className="info-panel-row">
@@ -236,7 +237,7 @@ export default function CompraForm({ productos, onRegistrar }) {
               <strong>{productoSeleccionado.stock} unidades</strong>
             </div>
             <div className="info-panel-row highlight">
-              <span>Nuevo stock:</span>
+              <span>Nuevo stock después de compra:</span>
               <strong className="success-text">{productoSeleccionado.stock + formData.cantidad} unidades</strong>
             </div>
           </div>
