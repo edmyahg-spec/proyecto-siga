@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useCarrito } from '../../contexts/CarritoContext';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
+import VentasRecientes from './VentasRecientes';
 
 export default function Ventas() {
   const { carrito, vaciarCarrito, eliminarProducto, calcularTotal } = useCarrito();
@@ -364,17 +365,11 @@ export default function Ventas() {
           </div>
         </div>
       </div>
-
-      <div className="modern-table-card">
-        <div className="modern-table-header">
-          <h3>Ventas Recientes</h3>
-        </div>
-        <div className="modern-table">
-          <p style={{ padding: '20px', textAlign: 'center', color: '#6B7280' }}>
-            Las ventas recientes aparecerán aquí
-          </p>
-        </div>
-      </div>
+          
+      <VentasRecientes />
     </div>
   );
 }
+
+     
+   
