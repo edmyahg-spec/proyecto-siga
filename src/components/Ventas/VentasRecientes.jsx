@@ -3,6 +3,7 @@ import api from '../../services/api';
 import { FiPrinter } from 'react-icons/fi';
 
 export default function VentasRecientes() {
+  console.log('🟢 VentasRecientes component mounted');
   const [ventas, setVentas] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -10,16 +11,25 @@ export default function VentasRecientes() {
     cargarVentasRecientes();
   }, []);
 
-  const cargarVentasRecientes = async () => {
-    try {
-      const response = await api.get('/ventas/recientes');
-      setVentas(response.data);
-    } catch (error) {
-      console.error('Error loading recent sales:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+ const cargarVentasRecientes = async () => {
+  try {
+    const token = localStorage.getItem('token');
+    console.log('Token:', token ? 'Existe' : 'No existe');
+    
+    const response = await fetch('http://localhost:3001/api/ventas/recientes', {
+      headers: {
+        'Authorization': 'Bearer ' + token
+      }
+    });
+    const data = await response.json();
+    console.log('Ventas cargadas:', data);
+    setVentas(data);
+  } catch (error) {
+    console.error('Error:', error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handlePrintTicket = (ventaId) => {
     window.open(`/ticket/${ventaId}`, '_blank');
@@ -34,6 +44,8 @@ export default function VentasRecientes() {
       </div>
     );
   }
+
+  console.log('5. Renderizando ventas:', ventas.length);
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -70,10 +82,10 @@ export default function VentasRecientes() {
                     <span className="font-mono text-sm font-semibold text-[#6b4f3a]">{venta.folio}</span>
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">
-                    {venta.productos_detalle || `${venta.total_productos} productos`}
+                    {venta.productos_detalle || `${venta.total_productos || 0} productos`}
                   </td>
                   <td className="px-4 py-3 text-right font-semibold text-gray-700">
-                    ${venta.total.toFixed(2)}
+                   ${(parseFloat(venta.total) || 0).toFixed(2)}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-500">{venta.usuario}</td>
                   <td className="px-4 py-3 text-center">
