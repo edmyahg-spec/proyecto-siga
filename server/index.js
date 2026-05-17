@@ -320,7 +320,6 @@ app.post('/api/ventas', authenticateToken, (req, res) => {
         return res.status(400).json({ error: 'No hay productos en la venta' });
     }
     
-    // Generar folio temporal
     const folioTemp = 'V-TEMP';
     
     db.query(
@@ -328,7 +327,7 @@ app.post('/api/ventas', authenticateToken, (req, res) => {
         [folioTemp, total, user, metodo_pago, notas],
         (err, result) => {
             if (err) {
-                console.error(err);
+                console.error('Error al insertar venta:', err);
                 return res.status(500).json({ error: 'Error al registrar venta' });
             }
             
@@ -337,18 +336,18 @@ app.post('/api/ventas', authenticateToken, (req, res) => {
             
             db.query("UPDATE ventas SET folio = ? WHERE id = ?", [folio, ventaId]);
             
-            let errorOccurred = false;
             let processed = 0;
+            let errorOccurred = false;
             
-            items.forEach((item, index) => {
-                const importe = (item.precio_unit * item.cantidad) - item.descuento;
+            items.forEach((item) => {
+                const importe = (item.precio_unit * item.cantidad) - (item.descuento || 0);
                 
                 db.query(
                     "INSERT INTO ventas_detalle (venta_id, producto_id, cantidad, precio_unit, descuento, subtotal) VALUES (?, ?, ?, ?, ?, ?)",
-                    [ventaId, item.id, item.cantidad, item.precio_unit, item.descuento, importe],
+                    [ventaId, item.id, item.cantidad, item.precio_unit, item.descuento || 0, importe],
                     (err) => {
                         if (err) {
-                            console.error(err);
+                            console.error('Error al insertar detalle:', err);
                             errorOccurred = true;
                             return;
                         }
@@ -357,7 +356,8 @@ app.post('/api/ventas', authenticateToken, (req, res) => {
                             "UPDATE productos SET stock = stock - ? WHERE id = ? AND stock >= ?",
                             [item.cantidad, item.id, item.cantidad],
                             (err) => {
-                                if (err || errorOccurred) {
+                                if (err) {
+                                    console.error('Error al actualizar stock:', err);
                                     errorOccurred = true;
                                     return;
                                 }
@@ -365,6 +365,8 @@ app.post('/api/ventas', authenticateToken, (req, res) => {
                                 processed++;
                                 if (processed === items.length && !errorOccurred) {
                                     res.json({ success: true, venta_id: ventaId, folio });
+                                } else if (processed === items.length && errorOccurred) {
+                                    res.status(500).json({ error: 'Error al procesar la venta' });
                                 }
                             }
                         );
@@ -378,15 +380,17 @@ app.post('/api/ventas', authenticateToken, (req, res) => {
 app.get('/api/ventas/recientes', authenticateToken, (req, res) => {
     db.query(`
         SELECT v.id, v.folio, v.fecha, v.total, v.usuario,
-               COUNT(DISTINCT vd.producto_id) as total_productos
+               COUNT(DISTINCT vd.producto_id) as total_productos,
+               GROUP_CONCAT(DISTINCT p.nombre ORDER BY p.nombre SEPARATOR ', ') as productos_detalle
         FROM ventas v 
         LEFT JOIN ventas_detalle vd ON v.id = vd.venta_id
+        LEFT JOIN productos p ON vd.producto_id = p.id
         GROUP BY v.id 
         ORDER BY v.fecha DESC 
         LIMIT 10
     `, (err, results) => {
         if (err) {
-            console.error(err);
+            console.error('Error en ventas recientes:', err);
             return res.status(500).json({ error: 'Error al cargar ventas' });
         }
         res.json(results);
