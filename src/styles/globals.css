@@ -2528,3 +2528,257 @@ tr:hover td {
 .new-category-input input {
     flex: 1;
 }
+
+/* Estilos para el formulario de compras */
+.modern-form-card {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.modern-form-header {
+    background: linear-gradient(135deg, #1a472a, #2d6a4f);
+    padding: 20px 24px;
+    color: white;
+}
+
+.modern-form-header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.modern-form-body {
+    padding: 24px;
+}
+
+.modern-form-group {
+    margin-bottom: 20px;
+}
+
+.modern-form-group label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #2d6a4f;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.modern-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.input-icon {
+    position: absolute;
+    left: 12px;
+    font-size: 1rem;
+    color: #95a5a6;
+}
+
+.modern-input-wrapper input,
+.modern-input-wrapper select {
+    width: 100%;
+    padding: 12px 12px 12px 36px;
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    transition: all 0.3s;
+    background: #fafafa;
+}
+
+.modern-input-wrapper input:focus,
+.modern-input-wrapper select:focus {
+    outline: none;
+    border-color: #2d6a4f;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(45, 106, 79, 0.1);
+}
+
+.modern-input-wrapper input.readonly,
+.modern-input-wrapper input[readonly] {
+    background: #f0f0f0;
+    color: #555;
+    cursor: not-allowed;
+    border-color: #ddd;
+}
+
+.modern-form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.error-message {
+    color: #e74c3c;
+    font-size: 0.75rem;
+    margin-top: 4px;
+    display: block;
+}
+
+/* Info panel de stock */
+.info-panel {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 12px;
+    padding: 16px;
+    margin: 20px 0;
+    border-left: 4px solid #2d6a4f;
+}
+
+.info-panel-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    font-size: 0.9rem;
+}
+
+.info-panel-row.highlight {
+    border-top: 1px solid #dee2e6;
+    margin-top: 8px;
+    padding-top: 12px;
+    font-weight: 600;
+}
+
+.success-text {
+    color: #2d6a4f;
+    font-weight: 700;
+    font-size: 1rem;
+}
+
+/* Botones */
+.modern-form-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+}
+
+.btn-modern-primary {
+    background: linear-gradient(135deg, #2d6a4f, #1a472a);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    flex: 1;
+}
+
+.btn-modern-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(45, 106, 79, 0.3);
+}
+
+.btn-modern-primary:disabled {
+    opacity: 0.6;
+    transform: none;
+    cursor: not-allowed;
+}
+
+.btn-modern-secondary {
+    background: #6c757d;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.btn-modern-secondary:hover {
+    background: #5a6268;
+}
+
+/* Mensaje de proveedor cargado automáticamente */
+.proveedor-auto-msg {
+    background: #d4edda;
+    color: #155724;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-left: 3px solid #28a745;
+}
+
+/* Campo nuevo proveedor */
+.new-category-input {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+}
+
+.new-category-input input {
+    flex: 1;
+    padding: 10px 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+}
+
+.confirm-btn {
+    background: #28a745;
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.cancel-btn {
+    background: #dc3545;
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+/* Toggle switch para estado */
+.toggle-switch {
+    display: flex;
+    gap: 12px;
+    background: #f0f0f0;
+    padding: 4px;
+    border-radius: 40px;
+}
+
+.toggle-option {
+    flex: 1;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 40px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.2s;
+    background: transparent;
+}
+
+.toggle-option.active {
+    background: #2d6a4f;
+    color: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .modern-form-row {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+    
+    .modern-form-body {
+        padding: 16px;
+    }
+    
+    .modern-form-header {
+        padding: 16px;
+    }
+}
