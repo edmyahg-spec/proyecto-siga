@@ -362,6 +362,18 @@ app.post('/api/ventas', authenticateToken, (req, res) => {
                                     return;
                                 }
                                 
+                                // ✅ REGISTRAR MOVIMIENTO CON OBSERVACIONES DEL USUARIO
+                                const cantidadNegativa = -item.cantidad;
+                                const observacionesVenta = notas && notas.trim() !== '' ? notas : `Venta ${folio}`;
+                                
+                                db.query(
+                                    "INSERT INTO movimientos (tipo, producto, cantidad, usuario, observaciones) VALUES (?, ?, ?, ?, ?)",
+                                    ['venta', item.nombre, cantidadNegativa, user, observacionesVenta],
+                                    (err) => {
+                                        if (err) console.error('Error al registrar movimiento:', err);
+                                    }
+                                );
+                                
                                 processed++;
                                 if (processed === items.length && !errorOccurred) {
                                     res.json({ success: true, venta_id: ventaId, folio });
@@ -449,10 +461,10 @@ app.get('/api/compras', authenticateToken, (req, res) => {
 });
 
 app.post('/api/compras', authenticateToken, (req, res) => {
-    const { producto_id, cantidad, precio_compra, proveedor } = req.body;
+    const { producto_id, cantidad, precio_compra, proveedor_id } = req.body;
     const user = req.user.usuario;
     
-    if (!producto_id || cantidad <= 0 || !precio_compra || !proveedor) {
+    if (!producto_id || cantidad <= 0 || !precio_compra) {
         return res.status(400).json({ error: 'Datos inválidos' });
     }
     
@@ -464,8 +476,8 @@ app.post('/api/compras', authenticateToken, (req, res) => {
         const productoNombre = productRows[0].nombre;
         
         db.query(
-            "INSERT INTO compras (producto_id, cantidad, precio_compra, proveedor, usuario) VALUES (?, ?, ?, ?, ?)",
-            [producto_id, cantidad, precio_compra, proveedor, user],
+            "INSERT INTO compras (producto_id, cantidad, precio_compra, proveedor_id, usuario) VALUES (?, ?, ?, ?, ?)",
+            [producto_id, cantidad, precio_compra, proveedor_id, user],
             (err) => {
                 if (err) {
                     console.error(err);
@@ -480,6 +492,16 @@ app.post('/api/compras', authenticateToken, (req, res) => {
                             console.error(err);
                             return res.status(500).json({ error: 'Error al actualizar stock' });
                         }
+                        
+                        // ✅ REGISTRAR MOVIMIENTO (AGREGAR ESTO)
+                       // Usar las observaciones/notas que escribió el usuario
+const observacionesVenta = notas && notas.trim() !== '' ? notas : `Venta ${folio}`;
+
+db.query(
+    "INSERT INTO movimientos (tipo, producto, cantidad, usuario, observaciones) VALUES (?, ?, ?, ?, ?)",
+    ['venta', item.nombre, cantidadNegativa, user, observacionesVenta],
+    (err) => { if (err) console.error('Error al registrar movimiento:', err); }
+);
                         
                         res.json({ success: true, message: 'Compra registrada' });
                     }
