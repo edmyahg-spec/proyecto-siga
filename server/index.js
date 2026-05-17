@@ -132,24 +132,131 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
+app.get('/api/productos/activos', authenticateToken, (req, res) => {
+    db.query("SELECT id, codigo, nombre, stock, precio_venta, precio_compra, proveedor_id FROM productos WHERE estado='activo' ORDER BY nombre", 
+        (err, results) => {
+            if (err) {
+                console.error(err);
+                return res.status(500).json({ error: 'Error al cargar productos' });
+            }
+            res.json(results);
+        }
+    );
+});
+
 // ============== RUTAS DE PRODUCTOS ==============
+
+// Obtener todos los productos
 app.get('/api/productos', authenticateToken, (req, res) => {
-    db.query('SELECT * FROM productos ORDER BY id DESC', (err, results) => {
+    const query = "SELECT p.*, prov.nombre as proveedor_nombre FROM productos p LEFT JOIN proveedores prov ON p.proveedor_id = prov.id ORDER BY p.id DESC";
+    
+    db.query(query, (err, results) => {
         if (err) {
-            console.error(err);
+            console.error('Error al cargar productos:', err);
             return res.status(500).json({ error: 'Error al cargar productos' });
         }
         res.json(results);
     });
 });
 
+// Obtener productos activos (para ventas y compras)
 app.get('/api/productos/activos', authenticateToken, (req, res) => {
-    db.query("SELECT id, codigo, nombre, stock, precio_venta FROM productos WHERE estado='activo' ORDER BY nombre", (err, results) => {
+    const query = "SELECT id, codigo, nombre, stock, precio_venta, precio_compra, proveedor_id FROM productos WHERE estado='activo' ORDER BY nombre";
+    
+    db.query(query, (err, results) => {
         if (err) {
-            console.error(err);
+            console.error('Error al cargar productos activos:', err);
             return res.status(500).json({ error: 'Error al cargar productos' });
         }
         res.json(results);
+    });
+});
+
+// Obtener categorías de productos
+app.get('/api/productos/categorias', authenticateToken, (req, res) => {
+    const query = "SELECT DISTINCT categoria FROM productos WHERE categoria IS NOT NULL AND categoria != '' ORDER BY categoria";
+    
+    db.query(query, (err, results) => {
+        if (err) {
+            console.error('Error al cargar categorías:', err);
+            return res.status(500).json({ error: 'Error al cargar categorías' });
+        }
+        res.json(results.map(r => r.categoria));
+    });
+});
+
+// Crear producto
+app.post('/api/productos', authenticateToken, (req, res) => {
+    const { codigo, nombre, categoria, proveedor_id, precio_compra, precio_venta, stock, stock_min, estado } = req.body;
+
+    if (!codigo || !nombre || !categoria) {
+        return res.status(400).json({ error: 'Código, nombre y categoría son requeridos' });
+    }
+
+    // Verificar si el código ya existe
+    db.query("SELECT id FROM productos WHERE codigo = ?", [codigo], (err, results) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ error: 'Error del servidor' });
+        }
+        
+        if (results.length > 0) {
+            return res.status(400).json({ error: 'El código de producto ya existe' });
+        }
+
+        const query = `INSERT INTO productos (codigo, nombre, categoria, proveedor_id, precio_compra, precio_venta, stock, stock_min, estado) 
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        
+        db.query(query, [codigo, nombre, categoria, proveedor_id || null, precio_compra || 0, precio_venta || 0, stock || 0, stock_min || 0, estado || 'activo'], 
+            (err, result) => {
+                if (err) {
+                    console.error('Error al crear producto:', err);
+                    return res.status(500).json({ error: 'Error al crear producto' });
+                }
+                res.json({ success: true, id: result.insertId, message: 'Producto creado' });
+            }
+        );
+    });
+});
+
+// Actualizar producto
+app.put('/api/productos/:id', authenticateToken, (req, res) => {
+    const { id } = req.params;
+    const { nombre, categoria, proveedor_id, precio_compra, precio_venta, stock, stock_min, estado } = req.body;
+
+    if (!nombre || !categoria) {
+        return res.status(400).json({ error: 'Nombre y categoría son requeridos' });
+    }
+
+    const query = `UPDATE productos SET nombre=?, categoria=?, proveedor_id=?, precio_compra=?, precio_venta=?, stock=?, stock_min=?, estado=? WHERE id=?`;
+    
+    db.query(query, [nombre, categoria, proveedor_id || null, precio_compra || 0, precio_venta || 0, stock || 0, stock_min || 0, estado || 'activo', id], 
+        (err, result) => {
+            if (err) {
+                console.error('Error al actualizar producto:', err);
+                return res.status(500).json({ error: 'Error al actualizar producto' });
+            }
+            if (result.affectedRows === 0) {
+                return res.status(404).json({ error: 'Producto no encontrado' });
+            }
+            res.json({ success: true, message: 'Producto actualizado' });
+        }
+    );
+});
+
+// Eliminar producto
+app.delete('/api/productos/:id', authenticateToken, (req, res) => {
+    const { id } = req.params;
+
+    db.query("DELETE FROM productos WHERE id = ?", [id], (err, result) => {
+        if (err) {
+            console.error('Error al eliminar producto:', err);
+            return res.status(500).json({ error: 'Error al eliminar producto' });
+        }
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'Producto no encontrado' });
+        }
+        res.json({ success: true, message: 'Producto eliminado' });
     });
 });
 
@@ -162,6 +269,47 @@ app.get('/api/productos/categorias', authenticateToken, (req, res) => {
         res.json(results.map(r => r.categoria));
     });
 });
+
+app.get('/api/proveedores', authenticateToken, (req, res) => {
+    const query = "SELECT id, nombre FROM proveedores ORDER BY nombre";
+    
+    db.query(query, (err, results) => {
+        if (err) {
+            console.error('Error al cargar proveedores:', err);
+            return res.status(500).json({ error: 'Error al cargar proveedores' });
+        }
+        res.json(results);
+    });
+});
+
+app.post('/api/proveedores', authenticateToken, (req, res) => {
+    const { nombre } = req.body;
+    
+    if (!nombre || nombre.trim() === '') {
+        return res.status(400).json({ error: 'El nombre del proveedor es requerido' });
+    }
+    
+    db.query("SELECT id FROM proveedores WHERE nombre = ?", [nombre], (err, results) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ error: 'Error del servidor' });
+        }
+        
+        if (results.length > 0) {
+            return res.status(400).json({ error: 'El proveedor ya existe' });
+        }
+        
+        db.query("INSERT INTO proveedores (nombre) VALUES (?)", [nombre], (err, result) => {
+            if (err) {
+                console.error(err);
+                return res.status(500).json({ error: 'Error al crear proveedor' });
+            }
+            res.json({ success: true, id: result.insertId, nombre });
+        });
+    });
+});
+
+
 
 // ============== RUTAS DE VENTAS ==============
 app.post('/api/ventas', authenticateToken, (req, res) => {

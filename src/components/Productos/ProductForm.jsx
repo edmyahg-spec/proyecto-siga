@@ -1,38 +1,63 @@
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 
 export default function ProductForm({ categorias, editProduct, onSave, onCancel }) {
   const [formData, setFormData] = useState({
     codigo: '',
     nombre: '',
     categoria: '',
-    proveedor: '',
+    proveedor_id: '',        // Cambiado: ahora guarda ID del proveedor
     precio_compra: 0,
     precio_venta: 0,
     stock: 0,
     stock_min: 0,
     estado: 'activo'
   });
+  
+  const [proveedores, setProveedores] = useState([]);
+  const [showNewProveedor, setShowNewProveedor] = useState(false);
+  const [newProveedor, setNewProveedor] = useState('');
   const [showNewCategory, setShowNewCategory] = useState(false);
   const [newCategory, setNewCategory] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
+  // Cargar proveedores desde la API
+  const fetchProveedores = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get('/api/proveedores', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setProveedores(response.data);
+    } catch (error) {
+      console.error('Error cargando proveedores:', error);
+    }
+  };
+
+  // Cargar proveedores al montar el componente
+  useEffect(() => {
+    fetchProveedores();
+  }, []);
+
+  // Cargar datos del producto si se está editando
   useEffect(() => {
     if (editProduct) {
       setFormData({
-        codigo: editProduct.codigo,
-        nombre: editProduct.nombre,
-        categoria: editProduct.categoria,
-        proveedor: editProduct.proveedor || '',
-        precio_compra: editProduct.precio_compra,
-        precio_venta: editProduct.precio_venta,
-        stock: editProduct.stock,
-        stock_min: editProduct.stock_min,
-        estado: editProduct.estado
+        codigo: editProduct.codigo || '',
+        nombre: editProduct.nombre || '',
+        categoria: editProduct.categoria || '',
+        proveedor_id: editProduct.proveedor_id || '',
+        precio_compra: editProduct.precio_compra || 0,
+        precio_venta: editProduct.precio_venta || 0,
+        stock: editProduct.stock || 0,
+        stock_min: editProduct.stock_min || 0,
+        estado: editProduct.estado || 'activo'
       });
     }
   }, [editProduct]);
 
+  // Validar formulario
   const validate = (finalCategoria = formData.categoria) => {
     const newErrors = {};
     if (!formData.codigo) newErrors.codigo = 'El código es requerido';
@@ -48,6 +73,32 @@ export default function ProductForm({ categorias, editProduct, onSave, onCancel 
     return Object.keys(newErrors).length === 0;
   };
 
+  // Guardar nuevo proveedor
+  const handleNewProveedor = async () => {
+    if (!newProveedor.trim()) {
+      alert('Ingrese el nombre del proveedor');
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.post('/api/proveedores', 
+        { nombre: newProveedor },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      // Agregar nuevo proveedor a la lista
+      const nuevoProveedor = { id: response.data.id, nombre: newProveedor };
+      setProveedores([...proveedores, nuevoProveedor]);
+      setFormData({ ...formData, proveedor_id: response.data.id });
+      setShowNewProveedor(false);
+      setNewProveedor('');
+    } catch (error) {
+      alert(error.response?.data?.error || 'Error al crear proveedor');
+    }
+  };
+
+  // Enviar formulario
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -67,12 +118,13 @@ export default function ProductForm({ categorias, editProduct, onSave, onCancel 
     }
   };
 
+  // Resetear formulario
   const resetForm = () => {
     setFormData({
       codigo: '',
       nombre: '',
       categoria: '',
-      proveedor: '',
+      proveedor_id: '',
       precio_compra: 0,
       precio_venta: 0,
       stock: 0,
@@ -80,7 +132,9 @@ export default function ProductForm({ categorias, editProduct, onSave, onCancel 
       estado: 'activo'
     });
     setShowNewCategory(false);
+    setShowNewProveedor(false);
     setNewCategory('');
+    setNewProveedor('');
     setErrors({});
   };
 
@@ -92,6 +146,7 @@ export default function ProductForm({ categorias, editProduct, onSave, onCancel 
       </div>
 
       <form onSubmit={handleSubmit} className="modern-form-body">
+        {/* Fila: Código y Nombre */}
         <div className="modern-form-row">
           <div className="modern-form-group">
             <label>Código *</label>
@@ -125,6 +180,7 @@ export default function ProductForm({ categorias, editProduct, onSave, onCancel 
           </div>
         </div>
 
+        {/* Campo: Categoría */}
         <div className="modern-form-group">
           <label>Categoría *</label>
           <div className="modern-input-wrapper">
@@ -173,19 +229,61 @@ export default function ProductForm({ categorias, editProduct, onSave, onCancel 
           {errors.categoria && <span className="error-message">{errors.categoria}</span>}
         </div>
 
+        {/* Campo: Proveedor (NUEVO: Selector con opción "+ Agregar nuevo") */}
         <div className="modern-form-group">
           <label>Proveedor</label>
           <div className="modern-input-wrapper">
             <span className="input-icon">🏭</span>
-            <input
-              type="text"
-              value={formData.proveedor}
-              onChange={(e) => setFormData({ ...formData, proveedor: e.target.value })}
-              placeholder="Nombre del proveedor"
-            />
+            {!showNewProveedor ? (
+              <select
+                value={formData.proveedor_id}
+                onChange={(e) => {
+                  if (e.target.value === '__nuevo__') {
+                    setShowNewProveedor(true);
+                    setFormData({ ...formData, proveedor_id: '' });
+                  } else {
+                    setFormData({ ...formData, proveedor_id: e.target.value });
+                  }
+                }}
+              >
+                <option value="">-- Seleccione un proveedor --</option>
+                {proveedores.map((prov) => (
+                  <option key={prov.id} value={prov.id}>
+                    {prov.nombre}
+                  </option>
+                ))}
+                <option value="__nuevo__" style={{ color: '#2e7d32', fontWeight: 'bold' }}>
+                  + Agregar nuevo proveedor
+                </option>
+              </select>
+            ) : (
+              <div className="new-category-input">
+                <input
+                  type="text"
+                  value={newProveedor}
+                  onChange={(e) => setNewProveedor(e.target.value)}
+                  placeholder="Nombre del nuevo proveedor"
+                  autoFocus
+                />
+                <button type="button" onClick={handleNewProveedor} className="confirm-btn">
+                  Guardar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowNewProveedor(false);
+                    setNewProveedor('');
+                  }}
+                  className="cancel-btn"
+                >
+                  Cancelar
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
+        {/* Fila: Precios */}
         <div className="modern-form-row">
           <div className="modern-form-group">
             <label>Precio Compra</label>
@@ -216,6 +314,7 @@ export default function ProductForm({ categorias, editProduct, onSave, onCancel 
           </div>
         </div>
 
+        {/* Fila: Stock y Stock Mínimo */}
         <div className="modern-form-row">
           <div className="modern-form-group">
             <label>Stock Inicial</label>
@@ -246,6 +345,7 @@ export default function ProductForm({ categorias, editProduct, onSave, onCancel 
           </div>
         </div>
 
+        {/* Estado */}
         <div className="modern-form-group">
           <label>Estado</label>
           <div className="toggle-switch">
@@ -266,6 +366,7 @@ export default function ProductForm({ categorias, editProduct, onSave, onCancel 
           </div>
         </div>
 
+        {/* Botones de acción */}
         <div className="modern-form-actions">
           <button type="submit" className="btn-modern-primary" disabled={loading}>
             {loading ? 'Guardando...' : (editProduct ? '💾 Actualizar Producto' : '✨ Guardar Producto')}

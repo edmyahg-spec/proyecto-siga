@@ -2504,3 +2504,27 @@ tr:hover td {
     min-width: 700px;
   }
 }
+
+.confirm-btn {
+    background: #4caf50;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-left: 8px;
+}
+
+.confirm-btn:hover {
+    background: #45a049;
+}
+
+.new-category-input {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.new-category-input input {
+    flex: 1;
+}
