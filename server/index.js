@@ -728,60 +728,46 @@ app.get('/api/inventario/movimientos', authenticateToken, (req, res) => {
 
 app.get('/api/reportes/inventario', authenticateToken, (req, res) => {
     const { formato } = req.query;
-
+    
     const query = `
         SELECT p.codigo, p.nombre, p.categoria, 
-               IFNULL(prov.nombre, '') as proveedor,
+               COALESCE(prov.nombre, p.proveedor, 'N/A') as proveedor,
                p.stock, p.stock_min as minimo,
                CASE WHEN p.stock <= p.stock_min THEN 'BAJO' ELSE 'NORMAL' END as estado
         FROM productos p
         LEFT JOIN proveedores prov ON p.proveedor_id = prov.id
         ORDER BY p.nombre
     `;
-
+    
     db.query(query, (err, results) => {
         if (err) {
-            console.error(err);
+            console.error('Error en reporte inventario:', err);
             return res.status(500).json({ error: 'Error al generar reporte' });
         }
-
+        
         if (formato === 'csv') {
             let csv = '\uFEFF';
             csv += 'Código,Nombre,Categoría,Proveedor,Stock,Mínimo,Estado\n';
+            
             results.forEach(row => {
-                csv += `"${row.codigo}","${row.nombre}","${row.categoria || ''}","${row.proveedor}",${row.stock},${row.minimo},"${row.estado}"\n`;
+                const escape = (str) => {
+                    if (str === null || str === undefined) return '';
+                    str = String(str);
+                    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                        str = str.replace(/"/g, '""');
+                        return `"${str}"`;
+                    }
+                    return str;
+                };
+                
+                csv += `${escape(row.codigo)},${escape(row.nombre)},${escape(row.categoria)},${escape(row.proveedor)},${row.stock},${row.minimo},${escape(row.estado)}\n`;
             });
+            
             res.setHeader('Content-Type', 'text/csv; charset=utf-8');
             res.setHeader('Content-Disposition', `attachment; filename="reporte_inventario_${Date.now()}.csv"`);
             return res.send(csv);
         }
-
-        if (formato === 'pdf') {
-            const doc = new PDFDocument({ margin: 40, size: 'A4' });
-            res.setHeader('Content-Type', 'application/pdf');
-            res.setHeader('Content-Disposition', `attachment; filename="reporte_inventario_${Date.now()}.pdf"`);
-            doc.pipe(res);
-
-            pdfHeader(doc, 'Reporte de Inventario');
-
-            const cols = [
-                { label: 'Código',    key: 'codigo',    x: 40,  width: 65 },
-                { label: 'Nombre',    key: 'nombre',    x: 110, width: 140 },
-                { label: 'Categoría', key: 'categoria', x: 255, width: 90 },
-                { label: 'Proveedor', key: 'proveedor', x: 350, width: 85 },
-                { label: 'Stock',     key: 'stock',     x: 440, width: 35, align: 'right' },
-                { label: 'Mín',       key: 'minimo',    x: 480, width: 30, align: 'right' },
-                { label: 'Estado',    key: 'estado',    x: 515, width: 40 },
-            ];
-
-            pdfTableHeader(doc, cols);
-            results.forEach((row, i) => pdfTableRow(doc, cols, row, i));
-            pdfFooter(doc, results.length);
-
-            doc.end();
-            return;
-        }
-
+        
         res.json(results);
     });
 });
@@ -792,7 +778,7 @@ app.get('/api/reportes/inventario', authenticateToken, (req, res) => {
 
 app.get('/api/reportes/ventas', authenticateToken, (req, res) => {
     const { formato } = req.query;
-
+    
     const query = `
         SELECT v.fecha, v.folio, 
                GROUP_CONCAT(p.nombre SEPARATOR ', ') as productos,
@@ -806,63 +792,36 @@ app.get('/api/reportes/ventas', authenticateToken, (req, res) => {
         GROUP BY v.id
         ORDER BY v.fecha DESC
     `;
-
+    
     db.query(query, (err, results) => {
         if (err) {
-            console.error(err);
+            console.error('Error en reporte ventas:', err);
             return res.status(500).json({ error: 'Error al generar reporte' });
         }
-
+        
         if (formato === 'csv') {
             let csv = '\uFEFF';
             csv += 'Fecha,Folio,Productos,Total,Tipo Pago,Observaciones,Usuario\n';
+            
             results.forEach(row => {
-                csv += `"${row.fecha}","${row.folio}","${row.productos}",${row.total},"${row.tipo_pago}","${row.observaciones}","${row.usuario}"\n`;
+                const escape = (str) => {
+                    if (str === null || str === undefined) return '';
+                    str = String(str);
+                    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                        str = str.replace(/"/g, '""');
+                        return `"${str}"`;
+                    }
+                    return str;
+                };
+                
+                csv += `${escape(row.fecha)},${escape(row.folio)},${escape(row.productos)},${row.total},${escape(row.tipo_pago)},${escape(row.observaciones)},${escape(row.usuario)}\n`;
             });
+            
             res.setHeader('Content-Type', 'text/csv; charset=utf-8');
             res.setHeader('Content-Disposition', `attachment; filename="reporte_ventas_${Date.now()}.csv"`);
             return res.send(csv);
         }
-
-        if (formato === 'pdf') {
-            const doc = new PDFDocument({ margin: 40, size: 'A4', layout: 'landscape' });
-            res.setHeader('Content-Type', 'application/pdf');
-            res.setHeader('Content-Disposition', `attachment; filename="reporte_ventas_${Date.now()}.pdf"`);
-            doc.pipe(res);
-
-            pdfHeader(doc, 'Reporte de Ventas');
-
-            const cols = [
-                { label: 'Fecha',        key: 'fecha',         x: 40,  width: 100 },
-                { label: 'Folio',        key: 'folio',         x: 145, width: 55 },
-                { label: 'Productos',    key: 'productos',     x: 205, width: 250 },
-                { label: 'Total',        key: 'total',         x: 460, width: 60, align: 'right' },
-                { label: 'Pago',         key: 'tipo_pago',     x: 525, width: 70 },
-                { label: 'Usuario',      key: 'usuario',       x: 600, width: 65 },
-            ];
-
-            pdfTableHeader(doc, cols);
-            results.forEach((row, i) => {
-                const displayRow = {
-                    ...row,
-                    fecha: row.fecha ? new Date(row.fecha).toLocaleDateString('es-MX') : '',
-                    total: `$${Number(row.total).toFixed(2)}`,
-                    productos: row.productos ? row.productos.substring(0, 60) + (row.productos.length > 60 ? '...' : '') : ''
-                };
-                pdfTableRow(doc, cols, displayRow, i);
-            });
-
-            // Total general
-            const totalGeneral = results.reduce((sum, r) => sum + Number(r.total || 0), 0);
-            doc.moveDown(0.3);
-            doc.font('Helvetica-Bold').fontSize(9)
-               .text(`Total general: $${totalGeneral.toFixed(2)}`, 40, doc.y, { align: 'right', width: 625 });
-
-            pdfFooter(doc, results.length);
-            doc.end();
-            return;
-        }
-
+        
         res.json(results);
     });
 });
@@ -873,62 +832,43 @@ app.get('/api/reportes/ventas', authenticateToken, (req, res) => {
 
 app.get('/api/reportes/movimientos', authenticateToken, (req, res) => {
     const { formato } = req.query;
-
+    
     const query = `
         SELECT fecha, tipo, producto, cantidad, usuario, 
                IFNULL(observaciones, '') as observaciones
         FROM movimientos 
         ORDER BY fecha DESC
     `;
-
+    
     db.query(query, (err, results) => {
         if (err) {
-            console.error(err);
+            console.error('Error en reporte movimientos:', err);
             return res.status(500).json({ error: 'Error al generar reporte' });
         }
-
+        
         if (formato === 'csv') {
             let csv = '\uFEFF';
             csv += 'Fecha,Tipo,Producto,Cantidad,Usuario,Observaciones\n';
+            
             results.forEach(row => {
-                csv += `"${row.fecha}","${row.tipo}","${row.producto}",${row.cantidad},"${row.usuario}","${row.observaciones}"\n`;
+                const escape = (str) => {
+                    if (str === null || str === undefined) return '';
+                    str = String(str);
+                    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                        str = str.replace(/"/g, '""');
+                        return `"${str}"`;
+                    }
+                    return str;
+                };
+                
+                csv += `${escape(row.fecha)},${escape(row.tipo)},${escape(row.producto)},${row.cantidad},${escape(row.usuario)},${escape(row.observaciones)}\n`;
             });
+            
             res.setHeader('Content-Type', 'text/csv; charset=utf-8');
             res.setHeader('Content-Disposition', `attachment; filename="reporte_movimientos_${Date.now()}.csv"`);
             return res.send(csv);
         }
-
-        if (formato === 'pdf') {
-            const doc = new PDFDocument({ margin: 40, size: 'A4' });
-            res.setHeader('Content-Type', 'application/pdf');
-            res.setHeader('Content-Disposition', `attachment; filename="reporte_movimientos_${Date.now()}.pdf"`);
-            doc.pipe(res);
-
-            pdfHeader(doc, 'Reporte de Movimientos');
-
-            const cols = [
-                { label: 'Fecha',          key: 'fecha',         x: 40,  width: 100 },
-                { label: 'Tipo',           key: 'tipo',          x: 145, width: 55 },
-                { label: 'Producto',       key: 'producto',      x: 205, width: 160 },
-                { label: 'Cantidad',       key: 'cantidad',      x: 370, width: 55, align: 'right' },
-                { label: 'Usuario',        key: 'usuario',       x: 430, width: 70 },
-                { label: 'Observaciones',  key: 'observaciones', x: 505, width: 90 },
-            ];
-
-            pdfTableHeader(doc, cols);
-            results.forEach((row, i) => {
-                const displayRow = {
-                    ...row,
-                    fecha: row.fecha ? new Date(row.fecha).toLocaleDateString('es-MX') : '',
-                };
-                pdfTableRow(doc, cols, displayRow, i);
-            });
-            pdfFooter(doc, results.length);
-
-            doc.end();
-            return;
-        }
-
+        
         res.json(results);
     });
 });
@@ -967,16 +907,34 @@ app.get('/api/reportes/compras', authenticateToken, (req, res) => {
             return res.status(500).json({ error: 'Error al generar reporte' });
         }
 
-        if (formato === 'csv') {
-            let csv = '\uFEFF';
-            csv += 'ID,Código,Producto,Cantidad,Precio Unitario,Total,Proveedor,Fecha,Usuario\n';
-            results.forEach(row => {
-                csv += `"${row.id}","${row.codigo}","${row.producto}",${row.cantidad},${row.precio_compra},${row.total},"${row.proveedor || 'N/A'}","${row.fecha}","${row.usuario}"\n`;
-            });
-            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-            res.setHeader('Content-Disposition', `attachment; filename="reporte_compras_${Date.now()}.csv"`);
-            return res.send(csv);
-        }
+       if (formato === 'csv') {
+    let csv = '\uFEFF'; // BOM para caracteres especiales
+    csv += 'ID,Código,Producto,Cantidad,Precio Unitario,Total,Proveedor,Fecha,Usuario\n';
+    
+    results.forEach(row => {
+        // Función para escapar campos de texto
+        const escapeCSV = (str) => {
+            if (str === null || str === undefined) return '""';
+            str = String(str);
+            // Si contiene comas, comillas dobles o saltos de línea, envolver entre comillas
+            if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                str = str.replace(/"/g, '""'); // Escapar comillas dobles
+                return `"${str}"`;
+            }
+            return str;
+        };
+        
+        const producto = escapeCSV(row.producto);
+        const codigo = escapeCSV(row.codigo);
+        const proveedor = escapeCSV(row.proveedor || 'N/A');
+        
+        csv += `${row.id},${codigo},${producto},${row.cantidad},${row.precio_compra},${row.total},${proveedor},${row.fecha},${row.usuario}\n`;
+    });
+    
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="reporte_compras_${Date.now()}.csv"`);
+    return res.send(csv);
+}
 
         if (formato === 'pdf') {
             const doc = new PDFDocument({ margin: 40, size: 'A4', layout: 'landscape' });
@@ -1029,53 +987,42 @@ app.get('/api/reportes/compras', authenticateToken, (req, res) => {
 
 app.get('/api/reportes/usuarios', authenticateToken, (req, res) => {
     const { formato } = req.query;
-
+    
     const query = `
         SELECT usuario, nombre, rol, estado
         FROM usuarios 
         ORDER BY nombre
     `;
-
+    
     db.query(query, (err, results) => {
         if (err) {
-            console.error(err);
+            console.error('Error en reporte usuarios:', err);
             return res.status(500).json({ error: 'Error al generar reporte' });
         }
-
+        
         if (formato === 'csv') {
             let csv = '\uFEFF';
             csv += 'Usuario,Nombre,Rol,Estado\n';
+            
             results.forEach(row => {
-                csv += `"${row.usuario}","${row.nombre}","${row.rol}","${row.estado}"\n`;
+                const escape = (str) => {
+                    if (str === null || str === undefined) return '';
+                    str = String(str);
+                    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                        str = str.replace(/"/g, '""');
+                        return `"${str}"`;
+                    }
+                    return str;
+                };
+                
+                csv += `${escape(row.usuario)},${escape(row.nombre)},${escape(row.rol)},${escape(row.estado)}\n`;
             });
+            
             res.setHeader('Content-Type', 'text/csv; charset=utf-8');
             res.setHeader('Content-Disposition', `attachment; filename="reporte_usuarios_${Date.now()}.csv"`);
             return res.send(csv);
         }
-
-        if (formato === 'pdf') {
-            const doc = new PDFDocument({ margin: 40, size: 'A4' });
-            res.setHeader('Content-Type', 'application/pdf');
-            res.setHeader('Content-Disposition', `attachment; filename="reporte_usuarios_${Date.now()}.pdf"`);
-            doc.pipe(res);
-
-            pdfHeader(doc, 'Reporte de Usuarios');
-
-            const cols = [
-                { label: 'Usuario', key: 'usuario', x: 40,  width: 120 },
-                { label: 'Nombre',  key: 'nombre',  x: 165, width: 200 },
-                { label: 'Rol',     key: 'rol',     x: 370, width: 90 },
-                { label: 'Estado',  key: 'estado',  x: 465, width: 90 },
-            ];
-
-            pdfTableHeader(doc, cols);
-            results.forEach((row, i) => pdfTableRow(doc, cols, row, i));
-            pdfFooter(doc, results.length);
-
-            doc.end();
-            return;
-        }
-
+        
         res.json(results);
     });
 });
